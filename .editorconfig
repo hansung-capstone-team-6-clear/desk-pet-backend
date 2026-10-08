@@ -1,0 +1,5 @@
+# 편집기 공통 설정. BOM이 붙으면 pyproject.toml을 읽지 못해 설치가 깨진다.
+root = true
+
+[*]
+charset = utf-8

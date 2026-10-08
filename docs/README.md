@@ -1,22 +1,11 @@
-﻿# Documentation (Temporary)
+# docs/ (임시 보관)
 
-## 안내
-이 디렉터리는 Desk Pet 프로젝트의 설계 및 기술 문서를 임시로 보관하기 위한 공간입니다.
+설계 문서의 최종 위치는 knowledge 레포 `projects/desk-pet/`다 (`hansung-capstone-team-6-clear/knowledge`).
 
-## 현재 문서
-- architecture/ : 백엔드 아키텍처
-- interfaces/ : API 및 인터페이스 명세
+| 이 폴더 문서 | 대체하는 knowledge 문서 |
+| --- | --- |
+| `architecture/backend_architecture.*` | `projects/desk-pet/architecture.md` |
+| `interfaces/backend_interfaces.md` | `projects/desk-pet/contracts.md` |
 
-## 향후 이전 계획
-모든 문서는 추후 `desk-pet-knowledge` 저장소로 이전할 예정입니다.
-
-이전 완료 후:
-1. Knowledge 저장소에 문서 업로드
-2. 문서 및 버전 확인
-3. Backend 저장소의 docs/ 디렉터리 삭제
-
-## 주의사항
-- 현재 문서는 임시 보관본입니다.
-- 이전 전까지 Backend 저장소에서 관리합니다.
-- 이전 완료 후 최종 관리 위치는 desk-pet-knowledge입니다.
-- 이전이 완료되기 전에는 docs/ 디렉터리를 삭제하지 않습니다.
+- 이 폴더의 문서는 이전 설계(헥사고날, MCP, 경량 Intent)를 기준으로 한다. 새 작업은 knowledge 문서를 따른다.
+- knowledge 레포의 desk-pet 문서가 merge되면 이 폴더를 지운다.
