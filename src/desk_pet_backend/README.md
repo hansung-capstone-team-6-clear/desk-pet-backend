@@ -22,14 +22,14 @@ api/  →  services/  →  eureka.py, db.py
 
 ## 요청 하나가 지나가는 길
 
-음성 요청 (`POST /text`, `POST /voice`):
+음성 요청 (`POST /api/text`, `POST /api/voice`):
 
 ```text
 api/voice.py → services/tasks.py handle()
                  ├─ eureka.py   list_open_tasks()   미완료 업무 목록
                  ├─ db.py       pending 조회         재질문 대기 중인지
                  ├─ services/ai.py analyze()         LLM 1회 → Decision
-                 ├─ (정책 검증)                       기본값 60분, itemId 확인, 과거 날짜 거절
+                 ├─ (정책 검증)                       기본값 60분, item_id 확인, 과거 날짜 거절
                  ├─ eureka.py   create_task() 등     실제 실행
                  └─ 템플릿 문장 → VoiceResponse
 ```

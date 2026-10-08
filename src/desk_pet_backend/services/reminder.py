@@ -25,16 +25,17 @@ async def check_once() -> None:
     """한 번 조회해서 보낼 알림을 보낸다.
 
     1. Eureka 목록 조회 (status == done 제외)
-    2. 마감 − offsetMinutes ≤ 지금 < 마감 이고, db.alerts에 (itemId, dueAt, offsetMinutes)가 없으면 대상
+    2. 마감 − offset_minutes ≤ 지금 < 마감 이고, db.alerts에 (item_id, due_at, offset_minutes)가 없으면 대상
     3. 보내기 직전 상태 API로 다시 확인 → done이면 건너뜀
-    4. 템플릿 문장: "{name} 마감이 {N분/1시간} 남았어요."
+    4. ProactiveAlert 만들기: request_id "alert_{item_id}_{due_at epoch ms}",
+       output.tts "{name} 마감이 {N분/1시간} 남았어요.", output.lcd {"expression": "alert", "text": "마감 1시간 전"}
     5. api.ws.send_alert() → 결과에 따라 alerts에 sent / undelivered 기록
     """
     # TODO(backend, 11/14)
     raise NotImplementedError
 
 
-async def resend_undelivered(device_id: str) -> None:
+async def resend_undelivered(user_id: str) -> None:
     """Pi가 다시 연결되면 undelivered 알림을 3~5단계부터 다시 처리한다 (남은 시간 재계산)."""
     # TODO(backend, 11/14)
     raise NotImplementedError

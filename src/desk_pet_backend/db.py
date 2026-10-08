@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS alerts (
 );
 
 CREATE TABLE IF NOT EXISTS pending (
-  device_id TEXT PRIMARY KEY,
+  user_id TEXT PRIMARY KEY,
   payload TEXT NOT NULL,        -- 재질문 전 원래 요청 (JSON)
   expires_at INTEGER NOT NULL
 );

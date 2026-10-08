@@ -68,7 +68,7 @@ class EurekaClient:
 
 
 class EurekaMock:
-    """메모리에만 있는 가짜 Eureka. 실제 키 없이 /text 흐름과 알림을 개발할 때 쓴다. 재시작하면 사라진다."""
+    """메모리에만 있는 가짜 Eureka. 실제 키 없이 /api/text 흐름과 알림을 개발할 때 쓴다. 재시작하면 사라진다."""
 
     def __init__(self) -> None:
         self.tasks: dict[str, Task] = {}

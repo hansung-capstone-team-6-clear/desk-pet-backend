@@ -1,26 +1,23 @@
 """레이어 간 데이터 형식.
 
-정본은 knowledge 레포 projects/desk-pet/contracts.md 다. 형식을 바꾸려면 그 문서 PR을 먼저 올린다.
-JSON은 camelCase(deviceId), 파이썬 코드에서는 snake_case(device_id)로 쓴다.
+정본은 knowledge 레포 projects/eureka-desk-pet/contracts.md 다. 형식을 바꾸려면 그 문서 PR을 먼저 올린다.
+필드 이름은 MVP Mock Server와 같은 snake_case다 (2026-10-07 하드웨어 결정).
 """
 
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
-from pydantic.alias_generators import to_camel
-
-
-class Contract(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-
+from pydantic import BaseModel
 
 # contracts § 1 — Pi → Backend 요청과 응답
 
-class TextRequest(Contract):
-    device_id: str
+class TextRequest(BaseModel):
+    user_id: str
+    request_id: str
     text: str
 
+
+Status = Literal["OK", "NO_SPEECH", "STT_ERROR", "ERROR"]
 
 ResponseType = Literal[
     "task_created",
@@ -28,29 +25,44 @@ ResponseType = Literal[
     "task_updated",
     "task_list",
     "reminder_set",
-    "clarify",
-    "no_speech",
+    "clarification",
     "error",
 ]
 
+Expression = Literal["idle", "listening", "thinking", "speaking", "alert", "surprised", "happy"]
 
-class VoiceResponse(Contract):
-    request_id: str
-    type: ResponseType
+
+class Lcd(BaseModel):
+    expression: Expression
     text: str
+
+
+class Output(BaseModel):
+    """Pi가 재생·표시할 내용. LED 색은 Pi가 정하므로 넣지 않는다."""
+
+    tts: str
+    lcd: Lcd | None = None
+
+
+class VoiceResponse(BaseModel):
+    request_id: str
+    status: Status
+    stt_text: str | None = None
+    type: ResponseType
+    output: Output
 
 
 # contracts § 2 — Backend → Pi 선제 알림 (WebSocket)
 
-class ProactiveAlert(Contract):
+class ProactiveAlert(BaseModel):
     event: Literal["proactive_alert"] = "proactive_alert"
-    item_id: str
-    task_name: str
-    remaining_minutes: int
-    text: str
+    type: Literal["deadline_approaching"] = "deadline_approaching"
+    user_id: str
+    request_id: str  # alert_<item_id>_<due_at epoch ms>
+    output: Output
 
 
-# contracts § 3 — AI 출력
+# contracts § 3 — AI 출력 (Backend 내부)
 
 Action = Literal[
     "create_task",
@@ -62,7 +74,7 @@ Action = Literal[
 ]
 
 
-class DecisionArgs(Contract):
+class DecisionArgs(BaseModel):
     name: str | None = None
     due_at: datetime | None = None
     offset_minutes: int | None = None
@@ -71,7 +83,7 @@ class DecisionArgs(Contract):
     candidates: list[str] | None = None
 
 
-class Decision(Contract):
+class Decision(BaseModel):
     transcript: str
     action: Action
     args: DecisionArgs
@@ -80,7 +92,7 @@ class Decision(Contract):
 
 # contracts § 4 — Eureka 업무 (eureka.py가 Eureka 응답을 이 모양으로 바꾼다)
 
-class Task(Contract):
+class Task(BaseModel):
     item_id: str
     name: str
     due_at: datetime

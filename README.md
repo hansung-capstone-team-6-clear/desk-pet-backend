@@ -3,14 +3,14 @@
 데스크펫의 서버. Raspberry Pi가 보낸 음성·텍스트를 해석해 Eureka Process 업무를 처리하고,
 마감이 다가오면 Pi에 먼저 알림을 보낸다.
 
-> 설계 정본은 knowledge 레포 `projects/desk-pet/`다. 구조는 `architecture.md`, 주고받는 형식은 `contracts.md`.
+> 설계 정본은 knowledge 레포 `projects/eureka-desk-pet/`다. 구조는 `architecture.md`, 주고받는 형식은 `contracts.md`.
 > 형식을 바꾸려면 `contracts.md` PR부터 올린다.
 
 ## 이 레포가 하는 일
 
 | 한다 | 하지 않는다 (Hardware 레포가 함) |
 | --- | --- |
-| `/voice`·`/text` 요청 처리, LLM 1회 호출, Eureka 호출, 마감 알림 판단·전송, SQLite 저장 | 녹음, TTS, 재생, LED·LCD 표시 |
+| `/api/voice`·`/api/text` 요청 처리, LLM 1회 호출, Eureka 호출, 마감 알림 판단·전송, SQLite 저장 | 녹음, TTS, 재생, LED·LCD 표시 |
 
 ## 폴더 구조
 
@@ -20,7 +20,7 @@ desk-pet-backend/
 │   ├── main.py             앱 진입점, /health
 │   ├── config.py           환경 변수
 │   ├── schemas.py          주고받는 데이터 모양 (contracts.md를 코드로)
-│   ├── api/                ① 입구: /voice, /text, /ws
+│   ├── api/                ① 입구: /api/voice, /api/text, /ws/hardware/{user_id}
 │   ├── services/           ② 규칙·흐름: tasks(요청 처리), ai(LLM), reminder(마감 알림)
 │   ├── eureka.py           ③ 바깥 연결: Eureka API + 개발용 mock
 │   └── db.py               ③ 바깥 연결: SQLite
@@ -62,7 +62,7 @@ docker compose up --build
 확인:
 
 1. http://localhost:8000/health → `{"status": "ok"}`
-2. http://localhost:8000/docs → API 목록 (`/text`, `/voice`는 아직 501)
+2. http://localhost:8000/docs → API 목록 (`/api/text`, `/api/voice`는 아직 501)
 3. `pytest` → 전부 통과
 
 `.env`의 기본값은 `EUREKA_MODE=mock`이라 Eureka 키 없이 개발할 수 있다.
@@ -75,11 +75,11 @@ docker compose up --build
 | --- | --- | --- | --- |
 | 10/18 | Eureka 실제 호출 | `eureka.py` `EurekaClient` | backend |
 | 10/18 | LLM 호출 + 평가셋 20개 | `services/ai.py`, `tests/eval/` | ai |
-| 10/18 | `/text` 요청 처리 | `services/tasks.py`, `api/voice.py` | backend |
-| 10/31 | `/voice` 음성 요청 | `api/voice.py`, `services/tasks.py` | backend |
+| 10/18 | `/api/text` 요청 처리 | `services/tasks.py`, `api/voice.py` | backend |
+| 10/31 | `/api/voice` 음성 요청 | `api/voice.py`, `services/tasks.py` | backend |
 | 11/14 | 마감 알림 | `services/reminder.py`, `api/ws.py`, `main.py` | backend |
 
-이미 동작하는 것: `/health`, 토큰 확인, `WS /ws/{deviceId}` ping/pong, `EurekaMock`, SQLite 테이블 생성, 시간 변환.
+이미 동작하는 것: `/health`, 토큰 확인, `WS /ws/hardware/{user_id}` connected·PING/PONG, `EurekaMock`, SQLite 테이블 생성, 시간 변환.
 Hardware 쪽은 지금 바로 WS 연결 테스트를 할 수 있다.
 
 ## 작업 규칙

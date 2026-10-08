@@ -1,4 +1,4 @@
-"""뼈대가 깨지지 않았는지 확인하는 최소 테스트: 라우팅, 토큰, WS ping, 시간 변환, mock Eureka."""
+"""뼈대가 깨지지 않았는지 확인하는 최소 테스트: 라우팅, 토큰, WS 규약, 응답 모양, 시간 변환, mock Eureka."""
 
 from datetime import datetime
 
@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from desk_pet_backend.config import settings
 from desk_pet_backend.eureka import KST, EurekaMock, from_epoch_ms, to_epoch_ms
 from desk_pet_backend.main import app
-from desk_pet_backend.schemas import TextRequest
+from desk_pet_backend.schemas import Lcd, Output, VoiceResponse
 
 client = TestClient(app)
 
@@ -19,22 +19,30 @@ def test_health():
 def test_text_rejects_wrong_token(monkeypatch):
     monkeypatch.setattr(settings, "device_token", "secret")
     res = client.post(
-        "/text",
-        json={"deviceId": "pet-01", "text": "오늘 할 일"},
+        "/api/text",
+        json={"user_id": "pet-01", "request_id": "req_test_1", "text": "오늘 할 일"},
         headers={"x-device-token": "wrong"},
     )
     assert res.status_code == 401
 
 
-def test_ws_ping_pong(monkeypatch):
+def test_ws_connected_and_ping_pong(monkeypatch):
     monkeypatch.setattr(settings, "device_token", "secret")
-    with client.websocket_connect("/ws/pet-01", headers={"x-device-token": "secret"}) as ws:
-        ws.send_json({"event": "ping"})
-        assert ws.receive_json() == {"event": "pong"}
+    with client.websocket_connect("/ws/hardware/pet-01", headers={"x-device-token": "secret"}) as ws:
+        assert ws.receive_json() == {"event": "connected", "user_id": "pet-01"}
+        ws.send_text("PING")
+        assert ws.receive_json() == {"event": "PONG"}
 
 
-def test_json_uses_camel_case():
-    assert TextRequest.model_validate({"deviceId": "pet-01", "text": "hi"}).device_id == "pet-01"
+def test_voice_response_matches_contract():
+    res = VoiceResponse(
+        request_id="req_test_1",
+        status="OK",
+        stt_text="보고서 작성 추가해줘",
+        type="task_created",
+        output=Output(tts="보고서 작성 업무를 등록했어요.", lcd=Lcd(expression="happy", text="업무 등록 완료")),
+    )
+    assert set(res.model_dump()) == {"request_id", "status", "stt_text", "type", "output"}
 
 
 def test_epoch_ms_round_trip_keeps_kst():

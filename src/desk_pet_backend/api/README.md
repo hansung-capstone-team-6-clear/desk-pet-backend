@@ -6,9 +6,11 @@ Pi가 보내는 요청이 처음 도착하는 곳이다. MVC로 치면 Controlle
 
 | 파일 | 하는 일 | 상태 |
 | --- | --- | --- |
-| `voice.py` | `POST /voice`(음성), `POST /text`(텍스트) → `services/tasks.py`의 `handle()` 호출 | TODO — 지금은 501 |
-| `ws.py` | `WS /ws/{deviceId}` 연결 보관, ping/pong, `send_alert()` | ping/pong 동작함, 미전달 알림 재전송은 TODO |
+| `voice.py` | `POST /api/voice`(음성), `POST /api/text`(텍스트) → `services/tasks.py`의 `handle()` 호출 | TODO — 지금은 501 |
+| `ws.py` | `WS /ws/hardware/{user_id}` 연결 보관, `connected` 전송, 텍스트 `PING` → `{"event": "PONG"}`, `send_alert()` | 동작함, 미전달 알림 재전송은 TODO |
 | `auth.py` | `X-Device-Token` 헤더 확인 | 동작함 |
+
+주소와 메시지 모양은 2026-10-07 하드웨어 결정(MVP Mock Server 형식)을 따른다 — knowledge 레포 `projects/eureka-desk-pet/contracts.md` § 1·2.
 
 ## 규칙
 
@@ -21,11 +23,12 @@ Pi가 보내는 요청이 처음 도착하는 곳이다. MVC로 치면 Controlle
 
 ```bash
 # 토큰 없이 → 401
-curl -X POST localhost:8000/text -H 'content-type: application/json' -d '{"deviceId":"pet-01","text":"오늘 할 일"}'
+curl -X POST localhost:8000/api/text -H 'content-type: application/json' \
+  -d '{"user_id":"pet-01","request_id":"req_test_1","text":"오늘 할 일"}'
 
 # 토큰 포함 → 지금은 501, 구현 후 200
-curl -X POST localhost:8000/text -H 'content-type: application/json' -H 'x-device-token: change-me' \
-  -d '{"deviceId":"pet-01","text":"오늘 할 일 알려줘"}'
+curl -X POST localhost:8000/api/text -H 'content-type: application/json' -H 'x-device-token: change-me' \
+  -d '{"user_id":"pet-01","request_id":"req_test_2","text":"오늘 할 일 알려줘"}'
 ```
 
 WebSocket은 `http://localhost:8000/docs`에 나오지 않는다. Hardware 레포 `app/`의 클라이언트나 `websocat` 같은 도구로 확인한다.

@@ -12,11 +12,11 @@
 ## 한 줄 형식
 
 ```json
-{"id": "create-01", "now": "2026-10-08T10:00:00+09:00", "tasks": [], "text": "내일 오후 3시까지 보고서 검토 추가해줘", "expected": {"action": "create_task", "args": {"name": "보고서 검토", "dueAt": "2026-10-09T15:00:00+09:00", "offsetMinutes": null}}}
+{"id": "create-01", "now": "2026-10-08T10:00:00+09:00", "tasks": [], "text": "내일 오후 3시까지 보고서 검토 추가해줘", "expected": {"action": "create_task", "args": {"name": "보고서 검토", "due_at": "2026-10-09T15:00:00+09:00", "offset_minutes": null}}}
 ```
 
 - `now`: 평가 기준 시각. "내일"을 계산하는 기준이라 고정한다.
-- `tasks`: 그 시점의 미완료 업무 (`itemId`, `name`, `dueAt`, `status`). 완료·변경·재질문 문항에 필요하다.
+- `tasks`: 그 시점의 미완료 업무 (`item_id`, `name`, `due_at`, `status`). 완료·변경·재질문 문항에 필요하다.
 - `expected`: 정답 `action`과 비교할 `args`만 적는다.
 
 ## 구성 (20개)
@@ -30,4 +30,4 @@
 | 알림 설정·변경 | 3 | "두 시간 전 말고 30분 전에 알려줘" |
 | 모호 → 재질문 | 3 | "보고서 알림 설정해줘" (이름에 "보고서"가 들어간 업무가 2개일 때) |
 
-결과는 knowledge 레포 `projects/desk-pet/ai/eval-YYYY-MM-DD.md`에 기록한다.
+결과는 knowledge 레포 `projects/eureka-desk-pet/ai/eval-YYYY-MM-DD.md`에 기록한다.
