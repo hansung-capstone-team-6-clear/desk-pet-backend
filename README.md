@@ -62,7 +62,7 @@ docker compose up --build
 확인:
 
 1. http://localhost:8000/health → `{"status": "ok"}`
-2. http://localhost:8000/docs → API 목록 (`/api/text`, `/api/voice`는 아직 501)
+2. http://localhost:8000/docs → API 목록 (`/api/text`, `/api/voice`는 토큰 필요)
 3. `pytest` → 전부 통과
 
 `.env`의 기본값은 `EUREKA_MODE=mock`이라 Eureka 키 없이 개발할 수 있다.

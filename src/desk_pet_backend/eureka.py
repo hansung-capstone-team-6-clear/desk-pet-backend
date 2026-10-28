@@ -11,6 +11,8 @@ from datetime import datetime, timedelta, timezone
 from functools import cache
 from itertools import count
 
+import httpx
+
 from desk_pet_backend.config import settings
 from desk_pet_backend.schemas import Task
 
@@ -38,18 +40,104 @@ class EurekaClient:
     상태 코드와 응답 본문을 함께 확인하고, 실패면 EurekaError를 낸다.
     """
 
+    def __init__(self, transport: httpx.AsyncBaseTransport | None = None) -> None:
+        self._transport = transport
+
+    async def _request(self, method: str, path: str, **kwargs: object) -> dict:
+        if not settings.eureka_api_key:
+            raise EurekaError("Eureka API 키가 필요합니다")
+
+        url = f"{settings.eureka_base_url.rstrip('/')}/{path.lstrip('/')}"
+        try:
+            async with httpx.AsyncClient(
+                headers={"x-api-key": settings.eureka_api_key},
+                timeout=5.0,
+                transport=self._transport,
+            ) as client:
+                response = await client.request(method, url, **kwargs)
+        except httpx.RequestError as exc:
+            raise EurekaError("Eureka API 연결에 실패했습니다") from exc
+
+        if not 200 <= response.status_code < 300:
+            raise EurekaError(
+                f"Eureka API 응답 실패: HTTP {response.status_code}, "
+                f"본문 {response.text[:200]}"
+            )
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise EurekaError("Eureka API 응답이 JSON이 아닙니다") from exc
+        if not isinstance(data, dict):
+            raise EurekaError("Eureka API 응답 형식이 올바르지 않습니다")
+        return data
+
     async def list_open_tasks(self) -> list[Task]:
         """GET /_api_/items/0/list?sites&detail=true&limit=100 → status가 done인 업무 제외.
 
-        100개를 넘으면 다음 페이지까지 읽는다 (페이지 파라미터는 멘토에게 확인).
+        100개 이상이면 페이지 처리 방식 확인 전까지 누락된 목록을 반환하지 않는다.
         """
-        # TODO(backend, 10/18)
-        raise NotImplementedError
+        data = await self._request("GET", "/_api_/items/0/list?sites&detail=true&limit=100")
+        items = data.get("list")
+        if not isinstance(items, list):
+            raise EurekaError("Eureka 업무 목록에 list 배열이 없습니다")
+        if len(items) >= 100:
+            raise EurekaError("Eureka 업무 목록 페이지 처리 방식 확인이 필요합니다")
+
+        tasks: list[Task] = []
+        for item in items:
+            if not isinstance(item, dict):
+                raise EurekaError("Eureka 업무 항목 형식이 올바르지 않습니다")
+            status = self._task_status(item)
+            if status == "done":
+                continue
+            try:
+                task = Task(
+                    item_id=str(item["id"]),
+                    name=item["name"],
+                    due_at=from_epoch_ms(int(item["dueAt"])),
+                    status=status,
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                raise EurekaError("Eureka 업무 항목의 필수 필드가 잘못됐습니다") from exc
+            tasks.append(task)
+        return tasks
+
+    @staticmethod
+    def _task_status(item: dict) -> str:
+        status = item.get("status")
+        if status in {"todo", "doing", "done", "hold"}:
+            return status
+        stages = item.get("stage$$")
+        if not isinstance(stages, list) or not stages:
+            raise EurekaError("Eureka 업무 상태를 판별할 수 없습니다")
+        stage_statuses = {stage.get("status") for stage in stages if isinstance(stage, dict)}
+        if stage_statuses == {"done"}:
+            return "done"
+        if "hold" in stage_statuses:
+            return "hold"
+        if "doing" in stage_statuses or "done" in stage_statuses:
+            return "doing"
+        if stage_statuses == {"todo"}:
+            return "todo"
+        raise EurekaError("Eureka 단계 상태를 판별할 수 없습니다")
 
     async def create_task(self, name: str, due_at: datetime) -> Task:
         """POST /_api_/items/0/start  {processId, name, dueAt: to_epoch_ms(due_at), priority}"""
-        # TODO(backend, 10/18)
-        raise NotImplementedError
+        if not settings.eureka_process_id:
+            raise EurekaError("Eureka processId가 필요합니다")
+        data = await self._request(
+            "POST",
+            "/_api_/items/0/start",
+            json={
+                "processId": settings.eureka_process_id,
+                "name": name,
+                "dueAt": to_epoch_ms(due_at),
+                "priority": "high",
+            },
+        )
+        if data.get("id") is None or data.get("name") != name:
+            raise EurekaError("Eureka 등록 응답의 id 또는 name이 일치하지 않습니다")
+        return Task(item_id=str(data["id"]), name=data["name"], due_at=due_at, status="todo")
 
     async def complete_task(self, item_id: str) -> None:
         """POST /_api_/items/{item_id}/complete"""
