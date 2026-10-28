@@ -4,22 +4,25 @@
 업무 규칙을 여기에 쓰지 않는다.
 """
 
+import wave
+from io import BytesIO
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from desk_pet_backend.api.auth import require_device_token
 from desk_pet_backend.schemas import TextRequest, VoiceResponse
+from desk_pet_backend.services import tasks
 
 router = APIRouter(prefix="/api", dependencies=[Depends(require_device_token)])
+MAX_UPLOAD_BYTES = 1_000_000
+MAX_FRAMES = 16_000 * 15
 
 
 @router.post("/text", response_model=VoiceResponse)
 async def text(req: TextRequest) -> VoiceResponse:
     """개발·평가·비상 시연용. 응답은 /api/voice와 같다."""
-    # TODO(backend, 10/18):
-    #   return await tasks.handle(user_id=req.user_id, request_id=req.request_id, text=req.text)
-    raise HTTPException(status_code=501, detail="not implemented")
+    return await tasks.handle(user_id=req.user_id, request_id=req.request_id, text=req.text)
 
 
 @router.post("/voice", response_model=VoiceResponse)
@@ -29,6 +32,29 @@ async def voice(
     request_id: Annotated[str, Form()],
 ) -> VoiceResponse:
     """WAV(16kHz, mono, 16bit, 최대 15초)를 받아 처리한다. 9초 안에 응답해야 한다 (Pi는 10초 대기)."""
-    # TODO(backend, 10/31):
-    #   return await tasks.handle(user_id=user_id, request_id=request_id, audio=await audio.read())
-    raise HTTPException(status_code=501, detail="not implemented")
+    data = await audio.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="WAV 파일이 너무 큽니다")
+    _validate_wav(data)
+    return await tasks.handle(user_id=user_id, request_id=request_id, audio=data)
+
+
+def _validate_wav(data: bytes) -> None:
+    try:
+        with wave.open(BytesIO(data), "rb") as recording:
+            if (
+                recording.getnchannels() != 1
+                or recording.getsampwidth() != 2
+                or recording.getframerate() != 16_000
+                or recording.getcomptype() != "NONE"
+            ):
+                raise HTTPException(
+                    status_code=422, detail="16kHz 모노 16비트 PCM WAV가 필요합니다"
+                )
+            frames = recording.getnframes()
+            if frames > MAX_FRAMES:
+                raise HTTPException(status_code=413, detail="음성은 최대 15초까지 가능합니다")
+            if frames == 0 or len(recording.readframes(frames)) != frames * 2:
+                raise HTTPException(status_code=422, detail="WAV 음성 데이터가 비어 있거나 잘렸습니다")
+    except (wave.Error, EOFError) as exc:
+        raise HTTPException(status_code=422, detail="올바른 WAV 파일이 아닙니다") from exc
