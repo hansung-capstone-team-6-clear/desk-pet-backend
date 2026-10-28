@@ -6,8 +6,8 @@
 
 | 파일 | 내용 | 상태 |
 | --- | --- | --- |
-| `utterances.jsonl` | 발화 20개, 한 줄에 하나 | TODO(ai, 10/18) |
-| `run_eval.py` | 발화마다 `analyze()`를 불러 정답과 비교하고 정확도·지연을 출력 | TODO(ai, 10/18) |
+| `utterances.jsonl` | 발화 20개, 한 줄에 하나 | 완료 |
+| `run_eval.py` | 발화마다 `analyze()`를 불러 정답과 비교하고 정확도·지연을 출력 | 완료 |
 
 ## 한 줄 형식
 

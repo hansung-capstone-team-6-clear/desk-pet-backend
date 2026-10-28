@@ -16,7 +16,7 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     "python-dotenv>=1.0.0",
     "python-multipart>=0.0.9",
-    # LLM SDK는 ai 담당이 모델을 확정한 뒤 추가한다 (src/desk_pet_backend/services/README.md)
+    "google-genai>=1.0.0",  # services/ai.py (Gemini Flash-Lite)
 ]
 
 [project.optional-dependencies]
