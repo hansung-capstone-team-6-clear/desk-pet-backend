@@ -13,7 +13,7 @@ from google.genai import types
 from desk_pet_backend.config import settings
 from desk_pet_backend.schemas import Decision, Task
 
-DEFAULT_MODEL = "gemini-2.5-flash-lite"
+DEFAULT_MODEL = "gemini-3.5-flash-lite"
 MAX_TASKS = 30
 WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
 
