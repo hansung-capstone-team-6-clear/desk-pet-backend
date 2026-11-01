@@ -1,5 +1,6 @@
 """뼈대가 깨지지 않았는지 확인하는 최소 테스트: 라우팅, 토큰, WS 규약, 응답 모양, 시간 변환, mock Eureka."""
 
+import re
 import wave
 from datetime import datetime
 from io import BytesIO
@@ -34,7 +35,7 @@ def test_text_rejects_wrong_token(monkeypatch):
     monkeypatch.setattr(settings, "device_token", "secret")
     res = client.post(
         "/api/text",
-        json={"user_id": "pet-01", "request_id": "req_test_1", "text": "오늘 할 일"},
+        json={"user_id": "pet-01", "text": "오늘 할 일"},
         headers={"x-device-token": "wrong"},
     )
     assert res.status_code == 401
@@ -57,11 +58,14 @@ def test_text_passes_request_to_task_handler(monkeypatch):
     monkeypatch.setattr(voice.tasks, "handle", fake_handle)
     res = client.post(
         "/api/text",
-        json={"user_id": "pet-01", "request_id": "req_test_2", "text": "오늘 할 일"},
+        json={"user_id": "pet-01", "text": "오늘 할 일"},
         headers={"x-device-token": "secret"},
     )
     assert res.status_code == 200
-    assert received == {"user_id": "pet-01", "request_id": "req_test_2", "text": "오늘 할 일"}
+    assert received["user_id"] == "pet-01"
+    assert received["text"] == "오늘 할 일"
+    assert re.fullmatch(r"req_\d{8}_\d{6}_[0-9a-f]{4}", received["request_id"])
+    assert res.json()["request_id"] == received["request_id"]
     assert res.json()["type"] == "task_list"
     assert res.json()["stt_text"] == "오늘 할 일"
 
@@ -84,12 +88,12 @@ def test_voice_passes_valid_wav_to_ai_and_returns_contract_response(monkeypatch,
     wav = make_wav()
     res = client.post(
         "/api/voice",
-        data={"user_id": "pet-01", "request_id": "req_voice_1"},
+        data={"user_id": "pet-01"},
         files={"audio": ("speech.wav", wav, "audio/wav")},
         headers={"x-device-token": "secret"},
     )
     assert res.status_code == 200
-    assert res.json()["request_id"] == "req_voice_1"
+    assert res.json()["request_id"].startswith("req_")
     assert res.json()["status"] == "OK"
     assert res.json()["type"] == "task_list"
     assert res.json()["stt_text"] == "오늘 할 일 알려줘"
@@ -111,7 +115,7 @@ def test_voice_rejects_invalid_wav(monkeypatch, wav, status_code):
     monkeypatch.setattr(settings, "device_token", "secret")
     res = client.post(
         "/api/voice",
-        data={"user_id": "pet-01", "request_id": "req_voice_bad"},
+        data={"user_id": "pet-01"},
         files={"audio": ("speech.wav", wav, "audio/wav")},
         headers={"x-device-token": "secret"},
     )
@@ -122,7 +126,7 @@ def test_voice_rejects_wrong_token(monkeypatch):
     monkeypatch.setattr(settings, "device_token", "secret")
     res = client.post(
         "/api/voice",
-        data={"user_id": "pet-01", "request_id": "req_voice_2"},
+        data={"user_id": "pet-01"},
         files={"audio": ("speech.wav", make_wav(), "audio/wav")},
         headers={"x-device-token": "wrong"},
     )

@@ -24,15 +24,15 @@ Pi가 보내는 요청이 처음 도착하는 곳이다. MVC로 치면 Controlle
 ```bash
 # 토큰 없이 → 401
 curl -X POST localhost:8000/api/text -H 'content-type: application/json' \
-  -d '{"user_id":"pet-01","request_id":"req_test_1","text":"오늘 할 일"}'
+  -d '{"user_id":"pet-01","text":"오늘 할 일"}'
 
 # 토큰 포함 → 처리 결과 200
 curl -X POST localhost:8000/api/text -H 'content-type: application/json' -H 'x-device-token: change-me' \
-  -d '{"user_id":"pet-01","request_id":"req_test_2","text":"오늘 할 일 알려줘"}'
+  -d '{"user_id":"pet-01","text":"오늘 할 일 알려줘"}'
 
 # 음성: 16kHz 모노 16비트 PCM WAV, 최대 15초
 curl -X POST localhost:8000/api/voice -H 'x-device-token: change-me' \
-  -F 'user_id=pet-01' -F 'request_id=req_voice_1' -F 'audio=@speech.wav;type=audio/wav'
+  -F 'user_id=pet-01' -F 'audio=@speech.wav;type=audio/wav'
 ```
 
 WebSocket은 `http://localhost:8000/docs`에 나오지 않는다. Hardware 레포 `app/`의 클라이언트나 `websocat` 같은 도구로 확인한다.
