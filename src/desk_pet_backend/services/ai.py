@@ -22,8 +22,8 @@ SYSTEM_PROMPT = """
 
 {"transcript": str, "action": str, "args": {...}, "question": str | null}
 
-- transcript: 사용자가 말한(입력한) 문장 그대로. 오디오면 받아 적은 문장.
-- args에는 해당 action이 쓰는 키만 넣는다. 나머지 키는 생략한다.
+- transcript: 사용자가 이번에 말한(입력한) 문장 그대로. 오디오면 받아 적은 문장. pending의 문장을 옮겨 적지 않는다.
+- args에는 해당 action이 쓰는 키만 넣는다. 나머지 키는 생략한다. 단, clarify는 지금까지 확정된 name·due_at·offset_minutes도 함께 넣는다.
 
 [action과 args]
 1. create_task: name, due_at, offset_minutes
@@ -37,13 +37,17 @@ SYSTEM_PROMPT = """
 - due_at은 +09:00이 붙은 ISO 8601 (예: 2026-10-09T15:00:00+09:00). now를 기준으로 계산한다. 시각 없이 날짜만 말하면 23:59.
 - 기존 업무의 날짜만 바꾸면("모레로", "다음 주 수요일로") 원래 due_at의 시각을 그대로 둔다.
 - name은 업무를 나타내는 명사구만 쓴다. "끝내기", "해야 해" 같은 동사·어미는 뺀다 ("초안 끝내야 해" → "초안").
-- 날짜를 지어내지 않는다. 등록할 때 마감을 말하지 않았으면 clarify로 마감을 묻는다.
-- 업무 이름을 알 수 없으면 clarify로 이름을 묻는다.
+  "내일 오후 3시까지"처럼 날짜·시간만 있는 말은 name이 될 수 없다.
+- 날짜를 지어내지 않는다. 등록할 때 마감을 말하지 않았거나 "다음 달", "언젠가"처럼 날짜를 하나로 정할 수 없으면 clarify로 마감을 묻는다.
+- 업무 이름을 알 수 없으면 clarify로 이름을 묻는다. name 없는 create_task는 내보내지 않는다.
 - item_id는 반드시 open_tasks에 있는 값만 쓴다. 대상 업무가 없거나 여러 개와 맞으면 clarify (여러 개면 candidates에 넣는다).
 - 알림 시점을 말하지 않았으면 offset_minutes는 null.
 - offset_minutes는 마감 몇 분 전에 알릴지다 ("2시간 전" → 120).
 - clarify가 아니면 question은 null.
 - pending이 있으면 사용자가 직전 재질문에 답하는 중이다. pending의 원래 요청과 이번 답을 합쳐 최종 action을 정한다.
+  - pending.transcript와 pending.question으로 원래 하려던 일(등록, 완료 등)을 파악하고 그 일을 바꾸지 않는다. 완료하려던 요청이 마감 변경이 되면 안 된다.
+  - 이번 답에 pending.question이 물은 정보(업무, 날짜 등)가 없으면 추측해서 실행하지 말고 같은 질문을 다시 clarify한다.
+  - 이번 답이 질문과 상관없는 새 요청이면 pending을 무시하고 새 요청으로 처리한다.
 """
 
 
