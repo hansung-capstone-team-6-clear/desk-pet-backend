@@ -13,8 +13,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from desk_pet_backend.schemas import Task  # noqa: E402
-from desk_pet_backend.services.ai import analyze  # noqa: E402
+from desk_pet_backend.schemas import Task
+from desk_pet_backend.services.ai import analyze
 
 UTTERANCES = Path(__file__).with_name("utterances.jsonl")
 MIN_INTERVAL = 4.5  # 무료 등급 분당 15회 제한
