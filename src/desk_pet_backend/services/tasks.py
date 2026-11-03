@@ -115,12 +115,36 @@ async def _handle(
             output=Output(tts=tts, lcd=Lcd(expression="speaking", text=f"업무 {len(selected)}건")),
         )
 
+    if decision.action == "complete_task":
+        task = _find_task(open_tasks, decision.args.item_id)
+        if task is None:
+            return _remember_and_clarify(
+                user_id, request_id, decision, "어떤 업무를 완료할까요?"
+            )
+        await eureka.complete_task(task.item_id)
+        _clear_pending_after_success(user_id, pending)
+        return VoiceResponse(
+            request_id=request_id,
+            status="OK",
+            stt_text=decision.transcript,
+            type="task_completed",
+            output=Output(
+                tts=f"{task.name} 업무를 완료했어요.",
+                lcd=Lcd(expression="happy", text="업무 완료"),
+            ),
+        )
+
     if decision.action == "clarify":
         return _remember_and_clarify(
             user_id, request_id, decision, decision.question or "어떤 업무인지 더 알려 주세요."
         )
 
     return _error(request_id, "이 작업은 아직 지원하지 않아요.")
+
+
+def _find_task(tasks: list[Task], item_id: str | None) -> Task | None:
+    """AI가 고른 item_id가 미완료 목록에 있을 때만 실행한다 (없는 id·이미 완료된 업무 방지)."""
+    return next((task for task in tasks if task.item_id == item_id), None)
 
 
 def _filter_tasks(tasks: list[Task], range_name: str, now: datetime) -> list[Task]:
