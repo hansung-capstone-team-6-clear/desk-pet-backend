@@ -179,3 +179,52 @@ def test_expired_pending_is_removed(mock_flow):
     with db.connect() as conn:
         row = conn.execute("SELECT 1 FROM pending WHERE user_id = ?", ("pet-01",)).fetchone()
     assert row is None
+
+
+async def test_complete_marks_task_done_and_returns_success(mock_flow, monkeypatch):
+    created = await mock_flow.create_task("보고서", datetime.now(KST) + timedelta(days=1))
+    set_decision(monkeypatch, Decision(
+        transcript="보고서 완료했어", action="complete_task",
+        args=DecisionArgs(item_id=created.item_id),
+    ))
+
+    response = await tasks.handle(user_id="pet-01", request_id="req-9", text="보고서 완료했어")
+
+    assert response.status == "OK"
+    assert response.type == "task_completed"
+    assert response.output.tts == "보고서 업무를 완료했어요."
+    assert response.output.lcd.expression == "happy"
+    assert mock_flow.tasks[created.item_id].status == "done"
+
+
+@pytest.mark.parametrize("item_id", [None, "unknown"])
+async def test_complete_unknown_task_clarifies_without_calling_eureka(mock_flow, monkeypatch, item_id):
+    set_decision(monkeypatch, Decision(
+        transcript="그거 완료했어", action="complete_task", args=DecisionArgs(item_id=item_id),
+    ))
+
+    async def fail_complete(item_id):
+        raise AssertionError("Eureka must not be called")
+
+    monkeypatch.setattr(mock_flow, "complete_task", fail_complete)
+    response = await tasks.handle(user_id="pet-01", request_id="req-10", text="그거 완료했어")
+    assert response.type == "clarification"
+    assert response.output.tts == "어떤 업무를 완료할까요?"
+    assert db.get_pending("pet-01")["action"] == "complete_task"
+
+
+async def test_eureka_failure_does_not_claim_complete_success(mock_flow, monkeypatch):
+    created = await mock_flow.create_task("보고서", datetime.now(KST) + timedelta(days=1))
+    set_decision(monkeypatch, Decision(
+        transcript="보고서 완료했어", action="complete_task",
+        args=DecisionArgs(item_id=created.item_id),
+    ))
+
+    async def fail_complete(item_id):
+        raise EurekaError("test failure")
+
+    monkeypatch.setattr(mock_flow, "complete_task", fail_complete)
+    response = await tasks.handle(user_id="pet-01", request_id="req-11", text="보고서 완료했어")
+    assert response.status == "ERROR"
+    assert "완료했어요" not in response.output.tts
+    assert mock_flow.tasks[created.item_id].status == "todo"

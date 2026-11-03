@@ -92,3 +92,23 @@ async def test_http_failure_is_not_treated_as_success():
     ))
     with pytest.raises(EurekaError, match="HTTP 401"):
         await client.list_open_tasks()
+
+
+async def test_complete_posts_to_item_and_checks_response_id():
+    seen = {}
+
+    def respond(request):
+        seen["method"], seen["path"], seen["body"] = request.method, request.url.path, request.content
+        return httpx.Response(200, json={"id": 1000013})
+
+    client = EurekaClient(transport=httpx.MockTransport(respond))
+    await client.complete_task("1000013")
+    assert seen == {"method": "POST", "path": "/flw-v1/_api_/items/1000013/complete", "body": b"{}"}
+
+
+async def test_complete_rejects_mismatched_response():
+    client = EurekaClient(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, json={"id": 999})
+    ))
+    with pytest.raises(EurekaError, match="완료 응답"):
+        await client.complete_task("1000013")

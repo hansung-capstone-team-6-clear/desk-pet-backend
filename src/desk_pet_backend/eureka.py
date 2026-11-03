@@ -119,7 +119,10 @@ class EurekaClient:
             return "doing"
         if stage_statuses == {"todo"}:
             return "todo"
-        raise EurekaError("Eureka 단계 상태를 판별할 수 없습니다")
+        raise EurekaError(
+            f"Eureka 단계 상태를 판별할 수 없습니다: id={item.get('id')}, "
+            f"stage status={[stage.get('status') if isinstance(stage, dict) else stage for stage in stages]}"
+        )
 
     async def create_task(self, name: str, due_at: datetime) -> Task:
         """POST /_api_/items/0/start  {processId, name, dueAt: to_epoch_ms(due_at), priority}"""
@@ -140,9 +143,10 @@ class EurekaClient:
         return Task(item_id=str(data["id"]), name=data["name"], due_at=due_at, status="todo")
 
     async def complete_task(self, item_id: str) -> None:
-        """POST /_api_/items/{item_id}/complete"""
-        # TODO(backend, 10/18)
-        raise NotImplementedError
+        """POST /_api_/items/{item_id}/complete  {}"""
+        data = await self._request("POST", f"/_api_/items/{item_id}/complete", json={})
+        if str(data.get("id")) != item_id:
+            raise EurekaError("Eureka 완료 응답의 id가 일치하지 않습니다")
 
     async def update_due(self, item_id: str, due_at: datetime) -> None:
         """PUT /_api_/items/{item_id}  {dueAt: to_epoch_ms(due_at)}"""
