@@ -4,16 +4,21 @@
 1차 모델은 Gemini Flash-Lite (knowledge 레포 projects/eureka-desk-pet/ai/README.md).
 """
 
+import asyncio
 import json
+import logging
 from datetime import datetime
 
 from google import genai
-from google.genai import types
+from google.genai import errors, types
 
 from desk_pet_backend.config import settings
 from desk_pet_backend.schemas import Decision, Task
 
+log = logging.getLogger(__name__)
+
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
+RETRY_DELAY_SECONDS = 0.5
 MAX_TASKS = 30
 WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
 
@@ -93,6 +98,8 @@ async def analyze(
     (transcript, action, args, question 포함) — 원래 요청과 되물은 질문을 LLM이 함께 본다.
 
     LLM 응답이 스키마에 맞지 않으면 Decision.model_validate_json()이 ValidationError를 낸다.
+    Gemini 503은 1회만 재시도하고, 다시 실패하면 예외를 그대로 올린다 (handle()이 ERROR로 응답).
+    재시도 시간도 handle()의 전체 제한 시간 안에 포함된다.
     """
     if audio is None and text is None:
         raise ValueError("audio 또는 text 중 하나는 있어야 한다")
@@ -106,13 +113,21 @@ async def analyze(
         contents.append(context + f"\n\n[사용자 요청]\n{text}")
 
     client = genai.Client(api_key=settings.llm_api_key or None)
-    response = await client.aio.models.generate_content(
-        model=settings.llm_model or DEFAULT_MODEL,
-        contents=contents,
-        config=types.GenerateContentConfig(
+    request = {
+        "model": settings.llm_model or DEFAULT_MODEL,
+        "contents": contents,
+        "config": types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT,
             response_mime_type="application/json",
             temperature=0.1,
         ),
-    )
+    }
+    try:
+        response = await client.aio.models.generate_content(**request)
+    except errors.APIError as exc:
+        if exc.code != 503:
+            raise
+        log.warning("gemini returned 503; retrying once")
+        await asyncio.sleep(RETRY_DELAY_SECONDS)
+        response = await client.aio.models.generate_content(**request)
     return Decision.model_validate_json(response.text)
