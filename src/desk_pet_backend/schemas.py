@@ -12,9 +12,10 @@ from pydantic import BaseModel
 # contracts § 1 — Pi → Backend 요청과 응답
 
 class TextRequest(BaseModel):
-    """request_id는 받지 않는다 — Backend가 만들어 응답에만 넣는다."""
+    """request_id를 보내면 응답에 그대로 돌려주고, 생략하면 Backend가 만든다."""
 
     user_id: str | None = None
+    request_id: str | None = None
     text: str
 
 
