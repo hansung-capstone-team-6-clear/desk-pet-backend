@@ -36,7 +36,7 @@ Desk Pet Backend의 API, 내부 서비스, Port, Adapter, Eureka Process 연동 
 Input:
 - audio: WAV, 16kHz, mono, 16bit
 - user_id: string (선택, 생략하면 기본 사용자)
-- request_id는 보내지 않는다 (Backend가 만들어 응답에만 넣는다)
+- request_id: string (선택, 보내면 응답에 그대로 돌려주고 생략하면 Backend가 만든다)
 
 Processing:
 

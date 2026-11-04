@@ -101,6 +101,51 @@ def test_voice_passes_valid_wav_to_ai_and_returns_contract_response(monkeypatch,
     assert received["text"] is None
 
 
+def test_voice_returns_request_id_sent_by_pi(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "device_token", "secret")
+    monkeypatch.setattr(settings, "db_path", str(tmp_path / "voice.db"))
+    monkeypatch.setattr(voice.tasks, "get_eureka", lambda: EurekaMock())
+
+    async def fake_analyze(**kwargs):
+        return Decision(
+            transcript="오늘 할 일 알려줘",
+            action="list_tasks",
+            args=DecisionArgs(range="today"),
+        )
+
+    monkeypatch.setattr(voice.tasks.ai, "analyze", fake_analyze)
+    res = client.post(
+        "/api/voice",
+        data={"request_id": "pi-req-001"},
+        files={"audio": ("speech.wav", make_wav(), "audio/wav")},
+        headers={"x-device-token": "secret"},
+    )
+    assert res.status_code == 200
+    assert res.json()["request_id"] == "pi-req-001"
+
+
+def test_text_returns_request_id_sent_by_pi(monkeypatch):
+    monkeypatch.setattr(settings, "device_token", "secret")
+
+    async def fake_handle(**kwargs):
+        return VoiceResponse(
+            request_id=kwargs["request_id"],
+            status="OK",
+            stt_text=kwargs["text"],
+            type="task_list",
+            output=Output(tts="미완료 업무가 없어요.", lcd=Lcd(expression="speaking", text="업무 0건")),
+        )
+
+    monkeypatch.setattr(voice.tasks, "handle", fake_handle)
+    res = client.post(
+        "/api/text",
+        json={"request_id": "pi-req-002", "text": "오늘 할 일"},
+        headers={"x-device-token": "secret"},
+    )
+    assert res.status_code == 200
+    assert res.json()["request_id"] == "pi-req-002"
+
+
 @pytest.mark.parametrize("wav, status_code", [
     (b"not a wav", 422),
     (make_wav(rate=8_000), 422),
