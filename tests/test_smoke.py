@@ -1,5 +1,6 @@
 """뼈대가 깨지지 않았는지 확인하는 최소 테스트: 라우팅, 토큰, WS 규약, 응답 모양, 시간 변환, mock Eureka."""
 
+import asyncio
 import re
 import wave
 from datetime import datetime
@@ -122,6 +123,53 @@ def test_voice_returns_request_id_sent_by_pi(monkeypatch, tmp_path):
     )
     assert res.status_code == 200
     assert res.json()["request_id"] == "pi-req-001"
+
+
+def test_voice_logs_step_timings(monkeypatch, tmp_path, caplog):
+    monkeypatch.setattr(settings, "device_token", "secret")
+    monkeypatch.setattr(settings, "db_path", str(tmp_path / "voice.db"))
+    monkeypatch.setattr(voice.tasks, "get_eureka", lambda: EurekaMock())
+
+    async def fake_analyze(**kwargs):
+        return Decision(
+            transcript="비밀 문장",
+            action="list_tasks",
+            args=DecisionArgs(range="today"),
+        )
+
+    monkeypatch.setattr(voice.tasks.ai, "analyze", fake_analyze)
+    with caplog.at_level("INFO", logger="desk_pet_backend"):
+        res = client.post(
+            "/api/voice",
+            files={"audio": ("speech.wav", make_wav(), "audio/wav")},
+            headers={"x-device-token": "secret"},
+        )
+    assert res.json()["status"] == "OK"
+    assert re.search(
+        r"request_id=req_\S+ eureka_list_ms=\d+ gemini_ms=\d+ total_ms=\d+ status=OK", caplog.text
+    )
+    assert "비밀 문장" not in caplog.text
+
+
+def test_voice_timeout_returns_error_and_logs_unfinished_step(monkeypatch, tmp_path, caplog):
+    monkeypatch.setattr(settings, "device_token", "secret")
+    monkeypatch.setattr(settings, "db_path", str(tmp_path / "voice.db"))
+    monkeypatch.setattr(voice.tasks, "get_eureka", lambda: EurekaMock())
+    monkeypatch.setattr(voice.tasks, "HANDLE_TIMEOUT_SECONDS", 0.01)
+
+    async def slow_analyze(**kwargs):
+        await asyncio.sleep(1)
+
+    monkeypatch.setattr(voice.tasks.ai, "analyze", slow_analyze)
+    with caplog.at_level("INFO", logger="desk_pet_backend"):
+        res = client.post(
+            "/api/voice",
+            files={"audio": ("speech.wav", make_wav(), "audio/wav")},
+            headers={"x-device-token": "secret"},
+        )
+    assert res.status_code == 200
+    assert res.json()["status"] == "ERROR"
+    assert re.search(r"eureka_list_ms=\d+ gemini_ms=- total_ms=\d+ status=ERROR", caplog.text)
 
 
 def test_text_returns_request_id_sent_by_pi(monkeypatch):

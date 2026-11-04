@@ -7,6 +7,7 @@ import asyncio
 import logging
 import sqlite3
 from datetime import datetime, timedelta
+from time import perf_counter
 
 from desk_pet_backend import db
 from desk_pet_backend.config import settings
@@ -15,6 +16,7 @@ from desk_pet_backend.schemas import Decision, Lcd, Output, Task, VoiceResponse
 from desk_pet_backend.services import ai
 
 log = logging.getLogger(__name__)
+HANDLE_TIMEOUT_SECONDS = 7
 
 
 async def handle(
@@ -24,7 +26,10 @@ async def handle(
     audio: bytes | None = None,
     text: str | None = None,
 ) -> VoiceResponse:
-    """요청 하나를 처리해 Pi에 돌려줄 응답을 만든다. 9초 안에 끝나야 한다 (넘으면 status ERROR).
+    """요청 하나를 처리해 Pi에 돌려줄 응답을 만든다. 7초 안에 끝나야 한다 (넘으면 status ERROR).
+
+    Pi는 업로드 시작부터 10초를 기다리는데, 이 타이머는 업로드가 끝난 뒤 시작한다.
+    업로드·왕복에 쓸 시간을 남겨 Pi가 끊기 전에 ERROR 응답을 받게 한다.
 
     1. Eureka 미완료 업무 목록 + db의 pending(user_id별 재질문 대기) 조회
     2. ai.analyze() 1회 호출 → Decision (transcript는 응답의 stt_text가 된다)
@@ -38,28 +43,59 @@ async def handle(
        예: task_created → tts "{name} 업무를 등록했어요. 마감은 {내일 오후 3시}예요.",
            lcd {"expression": "happy", "text": "업무 등록 완료"}
     """
+    timings: dict[str, int] = {}
+    started = perf_counter()
+    status = "ERROR"
     try:
-        async with asyncio.timeout(9):
-            return await _handle(user_id=user_id, request_id=request_id, audio=audio, text=text)
+        async with asyncio.timeout(HANDLE_TIMEOUT_SECONDS):
+            response = await _handle(
+                user_id=user_id,
+                request_id=request_id,
+                audio=audio,
+                text=text,
+                timings=timings,
+            )
+        status = response.status
+        return response
     except Exception:
-        log.exception("task request failed")
+        log.exception("task request failed: request_id=%s", request_id)
         return _error(request_id, "요청을 처리하지 못했어요. 다시 한 번 말씀해 주세요.")
+    finally:
+        # 음성·받아쓴 문장·토큰은 남기지 않는다. 구간이 없으면 그 앞에서 끝났거나 멈춘 것이다.
+        log.info(
+            "request_id=%s eureka_list_ms=%s gemini_ms=%s total_ms=%d status=%s",
+            request_id,
+            timings.get("eureka_list", "-"),
+            timings.get("gemini", "-"),
+            (perf_counter() - started) * 1000,
+            status,
+        )
 
 
 async def _handle(
-    *, user_id: str, request_id: str, audio: bytes | None, text: str | None
+    *,
+    user_id: str,
+    request_id: str,
+    audio: bytes | None,
+    text: str | None,
+    timings: dict[str, int],
 ) -> VoiceResponse:
     now = datetime.now(KST)
     eureka = get_eureka()
+    step_started = perf_counter()
     open_tasks = await eureka.list_open_tasks()
+    timings["eureka_list"] = round((perf_counter() - step_started) * 1000)
     pending = db.get_pending(user_id)
-    decision = Decision.model_validate(await ai.analyze(
+    step_started = perf_counter()
+    analyzed = await ai.analyze(
         audio=audio,
         text=text,
         now=now,
         open_tasks=open_tasks[:30],
         pending=pending,
-    ))
+    )
+    timings["gemini"] = round((perf_counter() - step_started) * 1000)
+    decision = Decision.model_validate(analyzed)
 
     if decision.action == "create_task":
         name = (decision.args.name or "").strip()
