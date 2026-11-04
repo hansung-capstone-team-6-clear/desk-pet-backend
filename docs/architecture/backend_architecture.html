@@ -4980,7 +4980,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <div class="pulse-dot"></div>
         <h1>Desk Pet Backend Architecture</h1>
       </div>
-      <p class="subtitle">Backend orchestration · Eureka Process integration · proactive deadline alerts</p>
+      <p class="subtitle">현행 MVP · 점선은 2차 선제 알림 · 기존 명세 및 현행 인터페이스는 CONTRACTS</p>
     </div>
 
 
@@ -4990,7 +4990,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
          data-preset-badge-editorial-plate="ARCHIFY / PLATE 04">
       <svg viewBox="0 0 1548 1148" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="classic" data-quality-profile="showcase" data-reader-fit="intrinsic-height" data-reader-min-text="7.5" data-reader-primary-text="14">
         <title id="archify-diagram-title">Desk Pet Backend Architecture</title>
-        <desc id="archify-diagram-description">Desk Pet Backend Architecture. External Pi input uses HTTP audio upload to server STT. LLM selects tools, MCP Client invokes through the Orchestrator / Application boundary. TaskPort and EurekaTaskAdapter are required for task execution. Normal HTTP responses and asynchronous WebSocket alerts remain distinct.</desc>
+        <desc id="archify-diagram-description">Current MVP. FastAPI receives audio or text, tasks.py reads context and calls Gemini through ai.py, then validates and executes a Decision. Eureka stores tasks and SQLite stores pending state and reminder offsets. Phase 2 alert paths are dashed.</desc>
         <!-- Definitions -->
         <defs>
           <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -5026,33 +5026,37 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
         <rect data-graph-role="structural-frame" data-composition-frame-kind="region" data-composition-frame-id="5" data-composition-frame-label="External Systems" x="634" y="944" width="872" height="128" rx="12" class="c-region" stroke-width="1"></rect>
 
-        
+
 
         <!-- Connection paths (before components for correct z-order) -->
+<path data-edge-id="context-eureka" data-edge-key="28" data-edge-from="intent-model" data-edge-to="task-port" data-edge-label="미완료 업무 조회" data-composition-points="985,180;985,203;925,203;925,531;885,531;885,550" d="M 985,180 L 985,203 L 925,203 L 925,531 L 885,531 L 885,550" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path>
+<path data-edge-id="context-pending" data-edge-key="29" data-edge-from="intent-model" data-edge-to="reminder-service" data-edge-label="재질문 상태 조회" data-composition-points="1015,180;1015,218;941,218;941,366;950,366" d="M 1015,180 L 1015,218 L 941,218 L 941,366 L 950,366" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path>
+<path data-edge-id="gemini-request" data-edge-key="26" data-edge-from="orchestrator" data-edge-to="llm-service" data-edge-label="WAV / text + context" data-composition-points="1230,180;1230,196;1100,196;1100,270" d="M 1230,180 L 1230,196 L 1100,196 L 1100,270" class="a-emphasis" stroke-width="1.5" marker-end="url(#arrowhead-emphasis)"></path>
+<path data-edge-id="pending-and-offset" data-edge-key="27" data-edge-from="task-service" data-edge-to="reminder-service" data-edge-label="SQLite read / write" data-composition-points="890,393;950,393" d="M 890,393 L 950,393" class="a-emphasis" stroke-width="1.5" marker-end="url(#arrowhead-emphasis)"></path>
         <path data-edge-from="user" data-edge-to="hardware" data-edge-label="input" data-edge-key="0" data-edge-id="user-hardware" data-composition-points="200,136;250,136" d="M 200 136 L 250 136" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"></path>
         <path data-edge-from="hardware" data-edge-to="audio-capture" data-edge-label="PCM" data-edge-key="1" data-edge-id="hardware-audio" data-composition-points="450,136;500,136" d="M 450 136 L 500 136" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path>
-        <path data-edge-from="audio-capture" data-edge-to="stt" data-edge-label="POST /api/voice · audio" data-edge-key="2" data-edge-id="audio-stt" data-composition-points="680,136;730,136" d="M 680 136 L 730 136" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path>
-        <path data-edge-from="stt" data-edge-to="intent-model" data-edge-label="text" data-edge-key="3" data-edge-id="stt-intent" data-composition-points="900,136;950,136" d="M 900 136 L 950 136" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path>
-        <path data-edge-from="intent-model" data-edge-to="orchestrator" data-edge-label="intent" data-edge-key="4" data-edge-id="intent-orchestrator" data-composition-points="1170,136;1220,136" d="M 1170 136 L 1220 136" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path>
-        <path data-edge-from="orchestrator" data-edge-to="task-service" data-edge-label="calls" data-edge-key="5" data-edge-id="orchestrator-task" data-composition-points="1335,180;1335,250;775,250;775,350" d="M 1335 180 L 1335 242 Q 1335 250 1327 250 L 783 250 Q 775 250 775 258 L 775 350" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"></path>
-        <path data-edge-from="task-service" data-edge-to="task-port" data-edge-label="uses" data-edge-key="6" data-edge-id="task-port-use" data-composition-points="775,436;785,550" data-composition-route="straight" d="M 775 436 L 785 550" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path>
-        
-        <path data-edge-from="eureka-adapter" data-edge-to="eureka-api" data-edge-label="HTTP / response" data-edge-key="8" data-edge-id="eureka-http" data-composition-points="785,852;785,970" d="M 785 852 L 785 970" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"></path>
-        <path data-edge-from="scheduler" data-edge-to="reminder-service" data-edge-label="triggers" data-edge-key="9" data-edge-id="scheduler-triggers-reminder" data-composition-points="470,842;470,1080;930,1080;930,393;950,393" d="M 470 842 L 470 1072 Q 470 1080 478 1080 L 922 1080 Q 930 1080 930 1072 L 930 401 Q 930 393 938 393 L 950 393" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"></path>
+        <path data-edge-from="audio-capture" data-edge-to="stt" data-edge-label="POST /api/voice" data-edge-key="2" data-edge-id="audio-stt" data-composition-points="680,136;730,136" d="M 680 136 L 730 136" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path>
+        <path data-edge-from="stt" data-edge-to="intent-model" data-edge-label="handle" data-edge-key="3" data-edge-id="stt-intent" data-composition-points="900,136;950,136" d="M 900 136 L 950 136" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path>
+        <path data-edge-from="intent-model" data-edge-to="orchestrator" data-edge-label="context" data-edge-key="4" data-edge-id="intent-orchestrator" data-composition-points="1170,136;1220,136" d="M 1170 136 L 1220 136" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path>
+        <path data-edge-from="orchestrator" data-edge-to="task-service" data-edge-label="Decision" data-edge-key="5" data-edge-id="orchestrator-task" data-composition-points="1335,180;1335,250;775,250;775,350" d="M 1335 180 L 1335 242 Q 1335 250 1327 250 L 783 250 Q 775 250 775 258 L 775 350" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"></path>
+        <path data-edge-from="task-service" data-edge-to="task-port" data-edge-label="get_eureka()" data-edge-key="6" data-edge-id="task-port-use" data-composition-points="775,436;785,550" data-composition-route="straight" d="M 775 436 L 785 550" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path>
+
+        <path data-edge-from="eureka-adapter" data-edge-to="eureka-api" data-edge-label="HTTP · real only" data-edge-key="8" data-edge-id="eureka-http" data-composition-points="785,852;785,970" d="M 785 852 L 785 970" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"></path>
+
         <g data-graph-role="automatic-crossover" style="--step:10">
           <path data-graph-role="automatic-crossover-underlay" d="M 950 393 L 938 393 Q 930 393 930 401 L 930 588 Q 930 596 922 596 L 910 596" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"></path>
-          <path data-edge-from="reminder-service" data-edge-to="task-port" data-edge-label="queries" data-edge-key="10" data-edge-id="reminder-task-port" data-composition-points="950,393;930,393;930,596;910,596" data-composition-crossover="halo" data-composition-independent="true" d="M 950 393 L 938 393 Q 930 393 930 401 L 930 588 Q 930 596 922 596 L 910 596" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path>
+
         </g>
-        
-        
-        <path data-edge-from="reminder-service" data-edge-to="output-service" data-edge-label="output" data-edge-key="13" data-edge-id="reminder-output" data-composition-points="1190,393;1250,393" d="M 1190 393 L 1250 393" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path>
-        <path data-edge-from="output-service" data-edge-to="output-port" data-edge-label="publishes" data-edge-key="14" data-edge-id="output-port-publish" data-composition-points="1365,436;1365,550" d="M 1365 436 L 1365 550" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path>
-        
-        <path data-edge-from="websocket-adapter" data-edge-to="raspberry-pi" data-edge-label="proactive_alert / output" data-edge-key="16" data-edge-id="websocket-pi" data-composition-points="1365,842;1365,970" d="M 1365 842 L 1365 970" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"></path>
-        
+
+
+
+        <path data-edge-id="output-port-publish" data-edge-key="14" data-edge-from="scheduler" data-edge-to="output-port" data-edge-label="2차 알림 판단" data-composition-points="470,760;470,705;1290,705;1290,642" d="M 470,760 L 470,705 L 1290,705 L 1290,642" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)" stroke-dasharray="5 5"></path>
+
+        <path data-edge-from="websocket-adapter" data-edge-to="raspberry-pi" data-edge-label="proactive_alert · phase 2" data-edge-key="16" data-edge-id="websocket-pi" data-composition-points="1365,842;1365,970" d="M 1365 842 L 1365 970" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)" stroke-dasharray="5 5"></path>
+
 
         <!-- Components -->
-        <path data-edge-id="eureka-implements-task" data-edge-from="task-port" data-edge-to="eureka-adapter" data-edge-label="via implementation" data-edge-key="7" data-composition-points="785,642;785,760" d="M 785 642 L 785 760" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path><path data-edge-id="websocket-implements-output" data-edge-from="output-port" data-edge-to="websocket-adapter" data-edge-label="via implementation" data-edge-key="15" data-composition-points="1365,642;1365,760" d="M 1365 642 L 1365 760" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path><g data-graph-role="automatic-crossover"><path data-graph-role="automatic-crossover-underlay" d="M 1060 180 L 1060 270" fill="none" stroke="var(--mask)" stroke-width="5.5" pointer-events="none"></path><path data-edge-id="intent-llm" data-edge-from="intent-model" data-edge-to="llm-service" data-edge-label="complex / low confidence" data-edge-key="18" data-composition-points="1060,180;1060,270" d="M 1060 180 L 1060 270" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)" data-composition-crossover="halo" data-composition-independent="true"></path></g><g data-graph-role="automatic-crossover"><path data-graph-role="automatic-crossover-underlay" d="M 1190 300 L 1207 300 L 1207 211 L 1280 211 L 1280 180" fill="none" stroke="var(--mask)" stroke-width="5.5" pointer-events="none"></path><path data-edge-id="llm-orchestrator" data-edge-from="llm-service" data-edge-to="orchestrator" data-edge-label="analysis · no tool needed" data-edge-key="19" data-composition-points="1190,300;1207,300;1207,211;1280,211;1280,180" d="M 1190 300 L 1207 300 L 1207 211 L 1280 211 L 1280 180" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)" data-composition-crossover="halo" data-composition-independent="true"></path></g><path data-edge-id="orchestrator-reminder" data-edge-from="orchestrator" data-edge-to="reminder-service" data-edge-label="reminder intent" data-edge-key="20" data-composition-points="1380,180;1380,333;1150,333;1150,350" d="M 1380 180 L 1380 333 L 1150 333 L 1150 350" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path><g data-graph-role="automatic-crossover"><path data-graph-role="automatic-crossover-underlay" d="M 850 436 L 850 477 L 1450 477 L 1450 436" fill="none" stroke="var(--mask)" stroke-width="5.5" pointer-events="none"></path><path data-edge-id="task-output" data-edge-from="task-service" data-edge-to="output-service" data-edge-label="task result" data-edge-key="21" data-composition-points="850,436;850,477;1450,477;1450,436" d="M 850 436 L 850 477 L 1450 477 L 1450 436" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)" data-composition-crossover="halo" data-composition-independent="true"></path></g><path data-edge-id="output-http-response" data-edge-from="output-service" data-edge-to="raspberry-pi" data-edge-label="HTTP Response · normal reply" data-edge-key="22" data-composition-points="1480,393;1524,393;1524,1011;1480,1011" d="M 1480 393 L 1524 393 L 1524 1011 L 1480 1011" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path><path data-edge-id="clarification-output" data-edge-from="orchestrator" data-edge-to="output-service" data-edge-label="clarification · no mutation" data-edge-key="23" data-composition-points="1425,180;1425,350" d="M 1425 180 L 1425 350" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path><path data-edge-id="llm-mcp" data-edge-from="llm-service" data-edge-to="mcp-client" data-edge-label="selected structured tool call" data-edge-key="24" data-composition-points="1190,320;1220,320" d="M 1190 320 L 1220 320" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path><path data-edge-id="mcp-orchestrator" data-edge-from="mcp-client" data-edge-to="orchestrator" data-edge-label="tool call / result · validate and route" data-edge-key="25" data-composition-points="1345,265;1345,180" d="M 1345 265 L 1345 180" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path><g id="node-user" data-node-id="user" data-node-label="User / PTT" tabindex="0" role="button" aria-label="Focus User / PTT, voice command / feedback, Device / Hardware Layer · External Input Reference" aria-pressed="false" data-node-kind="external" data-node-sublabel="voice command / feedback" data-node-context="Device / Hardware Layer · External Input Reference">
+        <path data-edge-id="eureka-implements-task" data-edge-from="task-port" data-edge-to="eureka-adapter" data-edge-label="real / mock" data-edge-key="7" data-composition-points="785,642;785,760" d="M 785 642 L 785 760" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path><path data-edge-id="websocket-implements-output" data-edge-from="output-port" data-edge-to="websocket-adapter" data-edge-label="phase 2" data-edge-key="15" data-composition-points="1365,642;1365,760" d="M 1365 642 L 1365 760" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)" stroke-dasharray="5 5"></path><g data-graph-role="automatic-crossover"><path data-graph-role="automatic-crossover-underlay" d="M 1060 180 L 1060 270" fill="none" stroke="var(--mask)" stroke-width="5.5" pointer-events="none"></path></g><g data-graph-role="automatic-crossover"><path data-graph-role="automatic-crossover-underlay" d="M 1190 300 L 1207 300 L 1207 211 L 1280 211 L 1280 180" fill="none" stroke="var(--mask)" stroke-width="5.5" pointer-events="none"></path><path data-edge-id="llm-orchestrator" data-edge-from="llm-service" data-edge-to="orchestrator" data-edge-label="Decision JSON" data-edge-key="19" data-composition-points="1190,300;1207,300;1207,211;1280,211;1280,180" d="M 1190 300 L 1207 300 L 1207 211 L 1280 211 L 1280 180" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)" data-composition-crossover="halo" data-composition-independent="true"></path></g><g data-graph-role="automatic-crossover"><path data-graph-role="automatic-crossover-underlay" d="M 850 436 L 850 477 L 1450 477 L 1450 436" fill="none" stroke="var(--mask)" stroke-width="5.5" pointer-events="none"></path><path data-edge-id="task-output" data-edge-from="task-service" data-edge-to="output-service" data-edge-label="result / clarification" data-edge-key="21" data-composition-points="850,436;850,477;1450,477;1450,436" d="M 850 436 L 850 477 L 1450 477 L 1450 436" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)" data-composition-crossover="halo" data-composition-independent="true"></path></g><path data-edge-id="output-http-response" data-edge-from="output-service" data-edge-to="raspberry-pi" data-edge-label="HTTP VoiceResponse" data-edge-key="22" data-composition-points="1480,393;1524,393;1524,1011;1480,1011" d="M 1480 393 L 1524 393 L 1524 1011 L 1480 1011" class="a-default" stroke-width="1.5" marker-end="url(#arrowhead)"></path><g id="node-user" data-node-id="user" data-node-label="User / PTT" tabindex="0" role="button" aria-label="Focus User / PTT, voice command / feedback, Device / Hardware Layer · External Input Reference" aria-pressed="false" data-node-kind="external" data-node-sublabel="voice command / feedback" data-node-context="Device / Hardware Layer · External Input Reference">
           <title>User / PTT · voice command / feedback · Device / Hardware Layer · External Input Reference</title>
           <rect x="40" y="100" width="160" height="72" rx="6" class="c-mask"></rect>
           <rect x="40" y="100" width="160" height="72" rx="6" class="c-external" stroke-width="1.5"></rect>
@@ -5091,97 +5095,97 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <text data-detail="context" x="590" y="150" class="t-muted" font-size="9" text-anchor="middle">Raspberry Pi · WAV recording</text>
         </g>
 
-        <g id="node-stt" data-node-id="stt" data-node-label="STT" tabindex="0" role="button" aria-label="Focus STT, server speech → text · ko-KR, Application Layer · server-side STT" aria-pressed="false" data-node-kind="backend" data-node-sublabel="server speech → text · ko-KR" data-node-context="Application Layer · server-side STT">
-          <title>STT · server speech → text · ko-KR · Application Layer · server-side STT</title>
+        <g id="node-stt" data-node-id="stt" data-node-label="FastAPI · api/voice.py" tabindex="0" role="button" aria-label="FastAPI · api/voice.py · Device token · WAV validation" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Device token · WAV validation" data-node-context="Application Layer · request entry">
+          <title>FastAPI · api/voice.py · Device token · WAV validation</title>
           <rect x="730" y="100" width="170" height="72" rx="6" class="c-mask"></rect>
           <rect x="730" y="100" width="170" height="72" rx="6" class="c-backend" stroke-width="1.5"></rect>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(736 106) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"></path>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="815" y="134" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">STT</text>
-        <text data-detail="context" x="815" y="150" class="t-muted" font-size="9" text-anchor="middle">server speech → text · ko-KR</text>
-        </g><g id="node-llm-service" data-node-id="llm-service" data-node-label="LLM Service" tabindex="0" role="button" aria-label="Focus LLM Service, complex request · parameters · clarification · tool selection, Application Layer · conditional LLM analysis" aria-pressed="false" data-node-kind="backend" data-node-sublabel="complex request · parameters · clarification · tool selection" data-node-context="Application Layer · conditional LLM analysis" data-node-tag="taskName / dueAt / priority / reminderAt; ambiguity detection; MCP tool selection; no direct mutation">
-          <title>LLM Service · complex request · parameters · clarification · tool selection · Application Layer · conditional LLM analysis</title>
+          <text data-node-label="" data-detail-anchor="" x="815" y="134" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">FastAPI · api/voice.py</text>
+        <text data-detail="context" x="815" y="150" class="t-muted" font-size="9" text-anchor="middle">Device token · WAV validation</text>
+        </g><g id="node-llm-service" data-node-id="llm-service" data-node-label="Gemini" tabindex="0" role="button" aria-label="Gemini · Audio or text" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Audio or text · Structured Decision JSON" data-node-context="External Systems · LLM analysis" data-node-tag="transcript / action / args / question; ambiguity detection; no direct mutation">
+          <title>Gemini · Audio or text</title>
           <rect x="970" y="270" width="220" height="60" rx="6" class="c-mask"></rect>
           <rect x="970" y="270" width="220" height="60" rx="6" class="c-backend" stroke-width="1.5"></rect>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(976 276) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"></path>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="1080" y="295" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">LLM Service</text>
-        <text data-detail="context" x="1080" y="312" class="t-muted" font-size="8.5" text-anchor="middle"><tspan x="1080" y="310">complex request · parameters</tspan><tspan x="1080" y="323">clarification · tool selection</tspan></text>
-        </g><g id="node-mcp-client" data-node-id="mcp-client" data-node-label="MCP Client" tabindex="0" role="button" aria-label="Focus MCP Client, structured tool invocation · external tool access, Application integration boundary" aria-pressed="false" data-node-kind="backend" data-node-sublabel="structured tool invocation · external tool access" data-node-context="Application Layer · integration client" data-node-tag="Tool selection from LLM; task mutations delegated to Orchestrator and Application Services; no direct Eureka access"><title>MCP Client · tool invocation interface · structured tool call / external tool access · task changes via Orchestrator / Application Service</title><rect x="1220" y="265" width="145" height="60" rx="6" class="c-mask" stroke-width="1.5"></rect><rect x="1220" y="265" width="145" height="60" rx="6" class="c-backend" stroke-width="1.5"></rect><text data-node-label="" data-detail-anchor="" x="1292.5" y="282" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">MCP Client</text><text data-detail="context" x="1292.5" y="300" class="t-muted" font-size="8" text-anchor="middle"><tspan x="1292.5" y="300">structured tool invocation</tspan><tspan x="1292.5" y="315">external tool access</tspan></text></g>
+          <text data-node-label="" data-detail-anchor="" x="1080" y="295" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Gemini</text>
+        <text data-detail="context" x="1080" y="312" class="t-muted" font-size="8.5" text-anchor="middle"><tspan x="1080" y="310">Audio or text</tspan><tspan x="1080" y="323">Structured Decision JSON</tspan></text>
+        </g><g id="node-mcp-client" data-node-id="mcp-client" data-node-label="MCP · legacy design" tabindex="0" role="button" aria-label="MCP · legacy design · Historical interface only" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Historical interface only" data-node-context="Application Layer · integration client" data-node-tag="Tool selection from LLM; task mutations delegated to Orchestrator and Application Services; no direct Eureka access"><title>MCP · legacy design · Historical interface only</title><rect x="1220" y="265" width="145" height="60" rx="6" class="c-mask" stroke-width="1.5"></rect><rect x="1220" y="265" width="145" height="60" rx="6" class="c-backend" stroke-width="1.5"></rect><text data-node-label="" data-detail-anchor="" x="1292.5" y="282" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">MCP · legacy design</text><text data-detail="context" x="1292.5" y="300" class="t-muted" font-size="8" text-anchor="middle">Historical interface only</text></g>
 
-        <g id="node-intent-model" data-node-id="intent-model" data-node-label="Lightweight Intent Model" tabindex="0" role="button" aria-label="Focus Lightweight Intent Model, classify · confidence · parameters, Application Layer · server-side intent analysis" aria-pressed="false" data-node-kind="backend" data-node-sublabel="classify · confidence · parameters" data-node-context="Application Layer · server-side intent analysis">
-          <title>Lightweight Intent Model · classify · confidence · parameters · Application Layer · server-side intent analysis</title>
+        <g id="node-intent-model" data-node-id="intent-model" data-node-label="Request context · tasks.py" tabindex="0" role="button" aria-label="Request context · tasks.py · Open tasks · pending · 7s handler" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Open tasks · pending · 7s handler" data-node-context="Application Layer · request context">
+          <title>Request context · tasks.py · Open tasks · pending · 7s handler</title>
           <rect x="950" y="92" width="220" height="88" rx="6" class="c-mask"></rect>
           <rect x="950" y="92" width="220" height="88" rx="6" class="c-backend" stroke-width="1.5"></rect>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(956 98) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"></path>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="1060" y="134" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Lightweight Intent Model</text>
-        <text data-detail="context" x="1060" y="150" class="t-muted" font-size="9" text-anchor="middle">classify · confidence · parameters</text>
+          <text data-node-label="" data-detail-anchor="" x="1060" y="134" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Request context · tasks.py</text>
+        <text data-detail="context" x="1060" y="150" class="t-muted" font-size="9" text-anchor="middle">Open tasks · pending · 7s handler</text>
         </g>
 
-        <g id="node-orchestrator" data-node-id="orchestrator" data-node-label="Intent / LLM Orchestrator" tabindex="0" role="button" aria-label="Focus Intent / LLM Orchestrator, validate AI / MCP · route services, Application Layer" aria-pressed="false" data-node-kind="backend" data-node-sublabel="validate AI / MCP · route services" data-node-context="Application Layer" data-node-tag="validate AI analysis and MCP results; route Application Services; clarification → no data mutation">
-          <title>Intent / LLM Orchestrator · validate AI / MCP · route services · Application Layer</title>
+        <g id="node-orchestrator" data-node-id="orchestrator" data-node-label="Analyze · ai.py" tabindex="0" role="button" aria-label="Analyze · ai.py · One Gemini call · structured Decision" aria-pressed="false" data-node-kind="backend" data-node-sublabel="One Gemini call · structured Decision" data-node-context="Application Layer" data-node-tag="Gemini call and Decision parsing; tasks.py validates and executes; clarification → no data mutation">
+          <title>Analyze · ai.py · One Gemini call · structured Decision</title>
           <rect x="1220" y="92" width="230" height="88" rx="6" class="c-mask"></rect>
           <rect x="1220" y="92" width="230" height="88" rx="6" class="c-backend" stroke-width="1.5"></rect>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1226 98) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"></path>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="1335" y="134" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Intent / LLM Orchestrator</text>
-        <text data-detail="context" x="1335" y="150" class="t-muted" font-size="9" text-anchor="middle">validate AI / MCP · route services</text>
-        <text data-detail="fine" x="1335" y="169" class="t-muted" font-size="8" text-anchor="middle">clarification → no data mutation</text></g>
+          <text data-node-label="" data-detail-anchor="" x="1335" y="134" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Analyze · ai.py</text>
+        <text data-detail="context" x="1335" y="150" class="t-muted" font-size="9" text-anchor="middle">One Gemini call · structured Decision</text>
+        </g>
 
-        <g id="node-task-service" data-node-id="task-service" data-node-label="TaskService" tabindex="0" role="button" aria-label="Focus TaskService, create · list · status · complete · update, Application Layer" aria-pressed="false" data-node-kind="backend" data-node-sublabel="create · list · status · complete · update" data-node-context="Application Layer">
-          <title>TaskService · create · list · status · complete · update · Application Layer</title>
+        <g id="node-task-service" data-node-id="task-service" data-node-label="Execute · tasks.py" tabindex="0" role="button" aria-label="Execute · tasks.py · Validate · create · list · complete" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Validate · create · list · complete" data-node-context="Application Layer">
+          <title>Execute · tasks.py · Validate · create · list · complete</title>
           <rect x="660" y="350" width="230" height="86" rx="6" class="c-mask"></rect>
           <rect x="660" y="350" width="230" height="86" rx="6" class="c-backend" stroke-width="1.5"></rect>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(666 356) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"></path>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="775" y="391" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">TaskService</text>
-        <text data-detail="context" x="775" y="407" class="t-muted" font-size="8.8" text-anchor="middle">create · list · status · complete · update</text>
+          <text data-node-label="" data-detail-anchor="" x="775" y="391" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Execute · tasks.py</text>
+        <text data-detail="context" x="775" y="407" class="t-muted" font-size="8.8" text-anchor="middle">Validate · create · list · complete</text>
         </g>
 
-        <g id="node-reminder-service" data-node-id="reminder-service" data-node-label="ReminderService" tabindex="0" role="button" aria-label="Focus ReminderService, deadline check · deduplication · reminder policy, Application Layer" aria-pressed="false" data-node-kind="backend" data-node-sublabel="deadline check · deduplication · reminder policy" data-node-context="Application Layer">
-          <title>ReminderService · deadline check · deduplication · reminder policy · Application Layer</title>
+        <g id="node-reminder-service" data-node-id="reminder-service" data-node-label="SQLite · db.py" tabindex="0" role="button" aria-label="SQLite · db.py · pending 60s · reminder offset" aria-pressed="false" data-node-kind="backend" data-node-sublabel="pending 60s · reminder offset" data-node-context="Storage · SQLite">
+          <title>SQLite · db.py · pending 60s · reminder offset</title>
           <rect x="950" y="350" width="240" height="86" rx="6" class="c-mask"></rect>
           <rect x="950" y="350" width="240" height="86" rx="6" class="c-backend" stroke-width="1.5"></rect>
           <g aria-hidden="true" data-semantic-sigil="clock" class="semantic-sigil s-backend" transform="translate(956 356) scale(0.6875)">
             <circle cx="8" cy="8" r="6"></circle><path d="M8 4v4l3 2"></path>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="1070" y="391" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">ReminderService</text>
-        <text data-detail="context" x="1070" y="407" class="t-muted" font-size="8.2" text-anchor="middle">deadline check · deduplication · reminder policy</text>
+          <text data-node-label="" data-detail-anchor="" x="1070" y="391" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">SQLite · db.py</text>
+        <text data-detail="context" x="1070" y="407" class="t-muted" font-size="8.2" text-anchor="middle">pending 60s · reminder offset</text>
         </g>
 
-        <g id="node-output-service" data-node-id="output-service" data-node-label="OutputService" tabindex="0" role="button" aria-label="Focus OutputService, user response · TTS text · LCD output, Application Layer" aria-pressed="false" data-node-kind="backend" data-node-sublabel="user response · TTS text · LCD output" data-node-context="Application Layer">
-          <title>OutputService · user response · TTS text · LCD output · Application Layer</title>
+        <g id="node-output-service" data-node-id="output-service" data-node-label="VoiceResponse · tasks.py" tabindex="0" role="button" aria-label="VoiceResponse · tasks.py · request_id · status · TTS / LCD" aria-pressed="false" data-node-kind="backend" data-node-sublabel="request_id · status · TTS / LCD" data-node-context="Application Layer">
+          <title>VoiceResponse · tasks.py · request_id · status · TTS / LCD</title>
           <rect x="1250" y="350" width="230" height="86" rx="6" class="c-mask"></rect>
           <rect x="1250" y="350" width="230" height="86" rx="6" class="c-backend" stroke-width="1.5"></rect>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(1256 356) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"></path>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="1365" y="391" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">OutputService</text>
-        <text data-detail="context" x="1365" y="407" class="t-muted" font-size="9" text-anchor="middle">user response · TTS text · LCD output</text>
+          <text data-node-label="" data-detail-anchor="" x="1365" y="391" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">VoiceResponse · tasks.py</text>
+        <text data-detail="context" x="1365" y="407" class="t-muted" font-size="9" text-anchor="middle">request_id · status · TTS / LCD</text>
         </g>
 
-        <g id="node-task-port" data-node-id="task-port" data-node-label="TaskPort" tabindex="0" role="button" aria-label="Focus TaskPort, create_task · get_tasks · get_task_status · complete_task · update_task, Ports" aria-pressed="false" data-node-kind="backend" data-node-sublabel="create_task · get_tasks · get_task_status · complete_task · update_task" data-node-tag="Application ↔ Eureka abstraction" data-node-context="Ports">
-          <title>TaskPort · create_task · get_tasks · get_task_status · complete_task · update_task · Ports</title>
+        <g id="node-task-port" data-node-id="task-port" data-node-label="Eureka client contract" tabindex="0" role="button" aria-label="Eureka client contract · get_eureka() · real or mock" aria-pressed="false" data-node-kind="backend" data-node-sublabel="get_eureka() · real or mock · List · create · complete" data-node-tag="Application ↔ Eureka abstraction" data-node-context="Ports">
+          <title>Eureka client contract · get_eureka() · real or mock</title>
           <rect x="660" y="550" width="250" height="92" rx="6" class="c-mask"></rect>
           <rect x="660" y="550" width="250" height="92" rx="6" class="c-backend" stroke-width="1.5"></rect>
           <g aria-hidden="true" data-semantic-sigil="backend" class="semantic-sigil s-backend" transform="translate(666 556) scale(0.6875)">
             <path d="M6 3 3 8l3 5M10 3l3 5-3 5"></path>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="785" y="577" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">TaskPort</text>
-        <text data-detail="context" x="785" y="610" class="t-muted" font-size="8" text-anchor="middle"><tspan x="785" y="610">create_task · get_tasks · get_task_status</tspan><tspan x="785" y="624">complete_task · update_task</tspan></text>
+          <text data-node-label="" data-detail-anchor="" x="785" y="577" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Eureka client contract</text>
+        <text data-detail="context" x="785" y="610" class="t-muted" font-size="8" text-anchor="middle"><tspan x="785" y="610">get_eureka() · real or mock</tspan><tspan x="785" y="624">List · create · complete</tspan></text>
         <text data-detail="context" x="785" y="593" class="t-backend" font-size="8" text-anchor="middle">Application ↔ Eureka abstraction</text>
         </g>
 
-        
 
-        <g id="node-output-port" data-node-id="output-port" data-node-label="OutputPublisherPort" tabindex="0" role="button" aria-label="Focus OutputPublisherPort, server-initiated output / proactive_alert, Ports" aria-pressed="false" data-node-kind="backend" data-node-sublabel="server-initiated output / proactive_alert" data-node-tag="asynchronous publishing only" data-node-context="Ports">
-          <title>OutputPublisherPort · server-initiated output / proactive_alert · Ports</title>
+
+        <g id="node-output-port" data-node-id="output-port" data-node-label="ProactiveAlert schema" tabindex="0" role="button" aria-label="ProactiveAlert schema · Phase 2 · event / output" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Phase 2 · event / output" data-node-tag="asynchronous publishing only" data-node-context="Ports">
+          <title>ProactiveAlert schema · Phase 2 · event / output</title>
           <rect x="1250" y="550" width="230" height="92" rx="6" class="c-mask"></rect>
           <rect x="1250" y="550" width="230" height="92" rx="6" class="c-backend" stroke-width="1.5"></rect>
           <g aria-hidden="true" data-semantic-sigil="messagebus" class="semantic-sigil s-backend" transform="translate(1256 556) scale(0.6875)">
@@ -5190,39 +5194,39 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             <circle cx="10.5" cy="8" r="1" class="sigil-fill"></circle>
             <circle cx="7" cy="11.5" r="1" class="sigil-fill"></circle>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="1365" y="594" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">OutputPublisherPort</text>
-        <text data-detail="context" x="1365" y="610" class="t-muted" font-size="8.4" text-anchor="middle">server-initiated output / proactive_alert</text>
-        <text data-detail="fine" x="1365" y="634" class="t-backend" font-size="7" text-anchor="middle">asynchronous publishing only</text>
+          <text data-node-label="" data-detail-anchor="" x="1365" y="594" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">ProactiveAlert schema</text>
+        <text data-detail="context" x="1365" y="610" class="t-muted" font-size="8.4" text-anchor="middle">Phase 2 · event / output</text>
+
         </g>
 
-        <g id="node-scheduler" data-node-id="scheduler" data-node-label="SchedulerAdapter" tabindex="0" role="button" aria-label="Focus SchedulerAdapter, periodic reminder trigger, Infrastructure / Adapter Layer" aria-pressed="false" data-node-kind="backend" data-node-sublabel="periodic reminder trigger" data-node-tag="driver" data-node-context="Infrastructure / Adapter Layer">
-          <title>SchedulerAdapter · periodic reminder trigger · Infrastructure / Adapter Layer · driver</title>
+        <g id="node-scheduler" data-node-id="scheduler" data-node-label="Reminder poller · phase 2" tabindex="0" role="button" aria-label="Reminder poller · phase 2 · reminder.py · startup not wired" aria-pressed="false" data-node-kind="backend" data-node-sublabel="reminder.py · startup not wired" data-node-tag="driver" data-node-context="Infrastructure / Adapter Layer">
+          <title>Reminder poller · phase 2 · reminder.py · startup not wired</title>
           <rect x="360" y="760" width="220" height="82" rx="6" class="c-mask"></rect>
           <rect x="360" y="760" width="220" height="82" rx="6" class="c-backend" stroke-width="1.5"></rect>
           <g aria-hidden="true" data-semantic-sigil="clock" class="semantic-sigil s-backend" transform="translate(366 766) scale(0.6875)">
             <circle cx="8" cy="8" r="6"></circle><path d="M8 4v4l3 2"></path>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="470" y="799" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">SchedulerAdapter</text>
-        <text data-detail="context" x="470" y="815" class="t-muted" font-size="9" text-anchor="middle">periodic reminder trigger</text>
-        <text data-detail="fine" x="470" y="834" class="t-backend" font-size="7" text-anchor="middle">driver</text>
+          <text data-node-label="" data-detail-anchor="" x="470" y="799" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Reminder poller · phase 2</text>
+        <text data-detail="context" x="470" y="815" class="t-muted" font-size="9" text-anchor="middle">reminder.py · startup not wired</text>
+
         </g>
 
-        <g id="node-eureka-adapter" data-node-id="eureka-adapter" data-node-label="EurekaTaskAdapter" tabindex="0" role="button" aria-label="Focus EurekaTaskAdapter, TaskPort implementation · HTTP mapping, Infrastructure / Adapter Layer" aria-pressed="false" data-node-kind="backend" data-node-sublabel="TaskPort implementation · HTTP mapping" data-node-tag="adapter" data-node-context="Infrastructure / Adapter Layer">
-          <title>EurekaTaskAdapter · TaskPort implementation · HTTP mapping · Infrastructure / Adapter Layer · adapter</title>
+        <g id="node-eureka-adapter" data-node-id="eureka-adapter" data-node-label="Eureka client · eureka.py" tabindex="0" role="button" aria-label="Eureka client · eureka.py · Real HTTP / in-memory mock" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Real HTTP / in-memory mock · Real mode reaches Eureka" data-node-tag="adapter" data-node-context="Infrastructure / Adapter Layer">
+          <title>Eureka client · eureka.py · Real HTTP / in-memory mock</title>
           <rect x="660" y="760" width="250" height="92" rx="6" class="c-mask"></rect>
           <rect x="660" y="760" width="250" height="92" rx="6" class="c-backend" stroke-width="1.5"></rect>
           <g aria-hidden="true" data-semantic-sigil="cloud" class="semantic-sigil s-backend" transform="translate(666 766) scale(0.6875)">
             <path d="M4.3 12.5h7.3a2.4 2.4 0 0 0 .2-4.8 4 4 0 0 0-7.5-1.3A3.1 3.1 0 0 0 4.3 12.5Z"></path>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="785" y="804" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">EurekaTaskAdapter</text>
-        <text data-detail="context" x="785" y="820" class="t-muted" font-size="9" text-anchor="middle">TaskPort implementation · HTTP mapping</text>
-        <text data-detail="fine" x="785" y="844" class="t-backend" font-size="7" text-anchor="middle">adapter</text>
+          <text data-node-label="" data-detail-anchor="" x="785" y="804" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">Eureka client · eureka.py</text>
+        <text data-detail="context" x="785" y="820" class="t-muted" font-size="9" text-anchor="middle">Real HTTP / in-memory mock</text>
+
         </g>
 
-        
 
-        <g id="node-websocket-adapter" data-node-id="websocket-adapter" data-node-label="WebSocketAdapter" tabindex="0" role="button" aria-label="Focus WebSocketAdapter, output / proactive_alert delivery, Infrastructure / Adapter Layer" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="output / proactive_alert delivery" data-node-tag="adapter" data-node-context="Infrastructure / Adapter Layer">
-          <title>WebSocketAdapter · output / proactive_alert delivery · Infrastructure / Adapter Layer</title>
+
+        <g id="node-websocket-adapter" data-node-id="websocket-adapter" data-node-label="WebSocket · api/ws.py" tabindex="0" role="button" aria-label="WebSocket · api/ws.py · Token · connected · PING/PONG" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="Token · connected · PING/PONG" data-node-tag="adapter" data-node-context="Infrastructure / Adapter Layer">
+          <title>WebSocket · api/ws.py · Token · connected · PING/PONG</title>
           <rect x="1250" y="760" width="230" height="82" rx="6" class="c-mask"></rect>
           <rect x="1250" y="760" width="230" height="82" rx="6" class="c-messagebus" stroke-width="1.5"></rect>
           <g aria-hidden="true" data-semantic-sigil="messagebus" class="semantic-sigil s-messagebus" transform="translate(1256 766) scale(0.6875)">
@@ -5231,9 +5235,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             <circle cx="10.5" cy="8" r="1" class="sigil-fill"></circle>
             <circle cx="7" cy="11.5" r="1" class="sigil-fill"></circle>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="1365" y="799" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">WebSocketAdapter</text>
-        <text data-detail="context" x="1365" y="815" class="t-muted" font-size="9" text-anchor="middle">output / proactive_alert delivery</text>
-        <text data-detail="fine" x="1365" y="834" class="t-messagebus" font-size="7" text-anchor="middle">adapter</text>
+          <text data-node-label="" data-detail-anchor="" x="1365" y="799" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">WebSocket · api/ws.py</text>
+        <text data-detail="context" x="1365" y="815" class="t-muted" font-size="9" text-anchor="middle">Token · connected · PING/PONG</text>
+
         </g>
 
         <g id="node-eureka-api" data-node-id="eureka-api" data-node-label="Eureka Process API" tabindex="0" role="button" aria-label="Focus Eureka Process API, task source of truth · REST, External Systems" aria-pressed="false" data-node-kind="cloud" data-node-sublabel="task source of truth · REST" data-node-context="External Systems">
@@ -5259,7 +5263,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <text data-detail="context" x="1365" y="1025" class="t-muted" font-size="9" text-anchor="middle">Edge-TTS · LED · LCD · speaker</text>
         </g>
 
-        
+
 
         <!-- Connection labels -->
         <g data-detail="context" data-edge-from="user" data-edge-to="hardware" data-edge-label="input" data-edge-key="0" data-edge-id="user-hardware">
@@ -5270,58 +5274,48 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <rect x="460" y="116" width="30" height="14" rx="3" class="c-mask"></rect>
           <text x="475" y="126" class="t-edge-default" font-size="8" text-anchor="middle">PCM</text>
         </g>
-        <g data-detail="context" data-edge-from="audio-capture" data-edge-to="stt" data-edge-label="POST /api/voice · audio" data-edge-key="2" data-edge-id="audio-stt"><path d="M 705 144 V 176" fill="none" class="a-default" stroke-width="0.6" stroke-dasharray="2 3" pointer-events="none" opacity="0.5"></path>
+        <g data-detail="context" data-edge-id="context-eureka" data-edge-key="28" data-edge-from="intent-model" data-edge-to="task-port" data-edge-label="미완료 업무 조회"><rect x="848" y="501" width="82" height="14" rx="3" class="c-mask"></rect><text x="889" y="511" class="t-edge-default" font-size="8" text-anchor="middle">미완료 업무 조회</text></g>
+        <g data-detail="context" data-edge-id="context-pending" data-edge-key="29" data-edge-from="intent-model" data-edge-to="reminder-service" data-edge-label="재질문 상태 조회"><rect x="945" y="201" width="82" height="14" rx="3" class="c-mask"></rect><text x="986" y="211" class="t-edge-default" font-size="8" text-anchor="middle">재질문 상태 조회</text></g>
+        <g data-detail="context" data-edge-from="audio-capture" data-edge-to="stt" data-edge-label="POST /api/voice" data-edge-key="2" data-edge-id="audio-stt"><path d="M 705 144 V 176" fill="none" class="a-default" stroke-width="0.6" stroke-dasharray="2 3" pointer-events="none" opacity="0.5"></path>
           <rect x="645" y="180" width="120" height="14" rx="3" class="c-mask"></rect>
-          <text x="705" y="190" class="t-edge-default" font-size="8" text-anchor="middle">POST /api/voice · audio</text>
+          <text x="705" y="190" class="t-edge-default" font-size="8" text-anchor="middle">POST /api/voice</text>
         </g>
-        <g data-detail="context" data-edge-from="stt" data-edge-to="intent-model" data-edge-label="text" data-edge-key="3" data-edge-id="stt-intent">
+        <g data-detail="context" data-edge-from="stt" data-edge-to="intent-model" data-edge-label="handle" data-edge-key="3" data-edge-id="stt-intent">
           <rect x="910" y="116" width="30" height="14" rx="3" class="c-mask"></rect>
-          <text x="925" y="126" class="t-edge-default" font-size="8" text-anchor="middle">text</text>
+          <text x="925" y="126" class="t-edge-default" font-size="8" text-anchor="middle">handle</text>
         </g>
-        <g data-detail="context" data-edge-from="intent-model" data-edge-to="orchestrator" data-edge-label="intent" data-edge-key="4" data-edge-id="intent-orchestrator">
+        <g data-detail="context" data-edge-from="intent-model" data-edge-to="orchestrator" data-edge-label="context" data-edge-key="4" data-edge-id="intent-orchestrator">
           <rect x="1175.6" y="116" width="38.8" height="14" rx="3" class="c-mask"></rect>
-          <text x="1195" y="126" class="t-edge-default" font-size="8" text-anchor="middle">intent</text>
+          <text x="1195" y="126" class="t-edge-default" font-size="8" text-anchor="middle">context</text>
         </g>
-        <g data-detail="context" data-edge-from="orchestrator" data-edge-to="task-service" data-edge-label="calls" data-edge-key="5" data-edge-id="orchestrator-task">
+        <g data-detail="context" data-edge-from="orchestrator" data-edge-to="task-service" data-edge-label="Decision" data-edge-key="5" data-edge-id="orchestrator-task">
           <rect x="798" y="230" width="34" height="14" rx="3" class="c-mask"></rect>
-          <text x="815" y="240" class="t-edge-emphasis" font-size="8" text-anchor="middle">calls</text>
+          <text x="815" y="240" class="t-edge-emphasis" font-size="8" text-anchor="middle">Decision</text>
         </g>
-        <g data-detail="context" data-edge-from="task-service" data-edge-to="task-port" data-edge-label="uses" data-edge-key="6" data-edge-id="task-port-use">
+        <g data-detail="context" data-edge-from="task-service" data-edge-to="task-port" data-edge-label="get_eureka()" data-edge-key="6" data-edge-id="task-port-use">
           <rect x="765" y="454" width="30" height="14" rx="3" class="c-mask"></rect>
-          <text x="780" y="464" class="t-edge-default" font-size="8" text-anchor="middle">uses</text>
+          <text x="780" y="464" class="t-edge-default" font-size="8" text-anchor="middle">get_eureka()</text>
         </g>
-        
-        <g data-detail="context" data-edge-from="eureka-adapter" data-edge-to="eureka-api" data-edge-label="HTTP / response" data-edge-key="8" data-edge-id="eureka-http">
+
+        <g data-detail="context" data-edge-from="eureka-adapter" data-edge-to="eureka-api" data-edge-label="HTTP · real only" data-edge-key="8" data-edge-id="eureka-http">
           <rect x="697" y="904" width="82" height="14" rx="3" class="c-mask"></rect>
-          <text x="738" y="914" class="t-edge-emphasis" font-size="8" text-anchor="middle">HTTP / response</text>
+          <text x="738" y="914" class="t-edge-emphasis" font-size="8" text-anchor="middle">HTTP · real only</text>
         </g>
-        <g data-detail="context" data-edge-from="scheduler" data-edge-to="reminder-service" data-edge-label="triggers" data-edge-key="9" data-edge-id="scheduler-triggers-reminder">
-          <rect x="675.8" y="1060" width="48.4" height="14" rx="3" class="c-mask"></rect>
-          <text x="700" y="1070" class="t-edge-emphasis" font-size="8" text-anchor="middle">triggers</text>
-        </g>
-        <g data-detail="context" data-edge-from="reminder-service" data-edge-to="task-port" data-edge-label="queries" data-edge-key="10" data-edge-id="reminder-task-port">
-          <rect x="880.4000000000001" y="487.5" width="43.6" height="14" rx="3" class="c-mask"></rect>
-          <text x="902.2" y="497.5" class="t-edge-default" font-size="8" text-anchor="middle">queries</text>
-        </g>
-        
-        
-        <g data-detail="context" data-edge-from="reminder-service" data-edge-to="output-service" data-edge-label="output" data-edge-key="13" data-edge-id="reminder-output">
-          <rect x="1200.6" y="373" width="38.8" height="14" rx="3" class="c-mask"></rect>
-          <text x="1220" y="383" class="t-edge-default" font-size="8" text-anchor="middle">output</text>
-        </g>
-        <g data-detail="context" data-edge-from="output-service" data-edge-to="output-port" data-edge-label="publishes" data-edge-key="14" data-edge-id="output-port-publish">
-          <rect x="1305.8000000000002" y="486" width="53.199999999999996" height="14" rx="3" class="c-mask"></rect>
-          <text x="1332.4" y="496" class="t-edge-default" font-size="8" text-anchor="middle">publishes</text>
-        </g>
-        
-        <g data-detail="context" data-edge-from="websocket-adapter" data-edge-to="raspberry-pi" data-edge-label="proactive_alert / output" data-edge-key="16" data-edge-id="websocket-pi">
+
+
+
+
+
+        <g data-detail="context" data-edge-id="output-port-publish" data-edge-key="14" data-edge-from="scheduler" data-edge-to="output-port" data-edge-label="2차 알림 판단"><rect x="1083" y="690" width="74" height="14" rx="3" class="c-mask"></rect><text x="1120" y="700" class="t-edge-default" font-size="8" text-anchor="middle">2차 알림 판단</text></g>
+
+        <g data-detail="context" data-edge-from="websocket-adapter" data-edge-to="raspberry-pi" data-edge-label="proactive_alert · phase 2" data-edge-key="16" data-edge-id="websocket-pi">
           <rect x="1233.8000000000002" y="899" width="125.19999999999999" height="14" rx="3" class="c-mask"></rect>
-          <text x="1296.4" y="909" class="t-edge-emphasis" font-size="8" text-anchor="middle">proactive_alert / output</text>
+          <text x="1296.4" y="909" class="t-edge-emphasis" font-size="8" text-anchor="middle">proactive_alert · phase 2</text>
         </g>
-        
+
 
         <!-- Boundary labels (foreground masks keep routes out of titles) -->
-        <g data-detail="context" data-edge-id="eureka-implements-task" data-edge-from="task-port" data-edge-to="eureka-adapter" data-edge-label="via implementation" data-edge-key="7"><rect x="736.7" y="697" width="96.60000000000001" height="16" rx="3" class="c-mask"></rect><text x="785" y="708" class="t-edge-default" font-size="8" text-anchor="middle">via implementation</text></g><g data-detail="context" data-edge-id="websocket-implements-output" data-edge-from="output-port" data-edge-to="websocket-adapter" data-edge-label="via implementation" data-edge-key="15"><rect x="1316.7" y="697" width="96.60000000000001" height="16" rx="3" class="c-mask"></rect><text x="1365" y="708" class="t-edge-default" font-size="8" text-anchor="middle">via implementation</text></g><g data-detail="context" data-edge-id="intent-llm" data-edge-from="intent-model" data-edge-to="llm-service" data-edge-label="complex / low confidence" data-edge-key="18"><rect x="1072.6" y="211" width="124.80000000000001" height="16" rx="3" class="c-mask"></rect><text x="1135" y="222" class="t-edge-default" font-size="8" text-anchor="middle">complex / low confidence</text></g><g data-detail="context" data-edge-id="llm-orchestrator" data-edge-from="llm-service" data-edge-to="orchestrator" data-edge-label="analysis · no tool needed" data-edge-key="19"><rect x="1163" y="191" width="111" height="16" rx="3" class="c-mask"></rect><text x="1218" y="202" class="t-edge-default" font-size="8" text-anchor="middle">analysis · no tool</text></g><g data-detail="context" data-edge-id="orchestrator-reminder" data-edge-from="orchestrator" data-edge-to="reminder-service" data-edge-label="reminder intent" data-edge-key="20"><rect x="1268.75" y="334" width="82.5" height="16" rx="3" class="c-mask"></rect><text x="1310" y="345" class="t-edge-default" font-size="8" text-anchor="middle">reminder intent</text></g><g data-detail="context" data-edge-id="task-output" data-edge-from="task-service" data-edge-to="output-service" data-edge-label="task result" data-edge-key="21"><rect x="1078.15" y="457" width="63.7" height="16" rx="3" class="c-mask"></rect><text x="1110" y="468" class="t-edge-default" font-size="8" text-anchor="middle">task result</text></g><g data-detail="context" data-edge-id="output-http-response" data-edge-from="output-service" data-edge-to="raspberry-pi" data-edge-label="HTTP Response · normal reply" data-edge-key="22" transform="rotate(-90 1517 700)"><rect x="1445.2" y="689" width="143.6" height="16" rx="3" class="c-mask"></rect><text x="1517" y="700" class="t-edge-default" font-size="8" text-anchor="middle">HTTP Response · normal reply</text></g><g data-detail="context" data-edge-id="clarification-output" data-edge-from="orchestrator" data-edge-to="output-service" data-edge-label="clarification · no mutation" data-edge-key="23" transform="rotate(-90 1455 265)"><rect x="1418.45" y="254" width="73.1" height="16" rx="3" class="c-mask"></rect><text x="1455" y="265" class="t-edge-default" font-size="8" text-anchor="middle">clarification</text></g><g data-edge-id="llm-mcp" data-edge-from="llm-service" data-edge-to="mcp-client" data-edge-label="selected structured tool call" data-edge-key="24" data-detail="context"><rect x="1190.4" y="301" width="29.2" height="16" rx="3" class="c-mask"></rect><text x="1205" y="312" class="t-edge-default" font-size="8" text-anchor="middle">tool</text></g><g data-edge-id="mcp-orchestrator" data-edge-from="mcp-client" data-edge-to="orchestrator" data-edge-label="tool call / result · validate and route" data-edge-key="25" data-detail="context" transform="rotate(-90 1358 219)"><rect x="1329" y="208" width="58" height="16" rx="3" class="c-mask"></rect><text x="1358" y="219" class="t-edge-default" font-size="8" text-anchor="middle">MCP result</text></g><g data-graph-role="structural-frame-label" data-composition-frame-id="0" data-composition-frame-kind="region" data-composition-frame-label="Device / Hardware Layer">
+        <g data-detail="context" data-edge-id="eureka-implements-task" data-edge-from="task-port" data-edge-to="eureka-adapter" data-edge-label="real / mock" data-edge-key="7"><rect x="736.7" y="697" width="96.60000000000001" height="16" rx="3" class="c-mask"></rect><text x="785" y="708" class="t-edge-default" font-size="8" text-anchor="middle">real / mock</text></g><g data-detail="context" data-edge-id="websocket-implements-output" data-edge-from="output-port" data-edge-to="websocket-adapter" data-edge-label="phase 2" data-edge-key="15"><rect x="1316.7" y="697" width="96.60000000000001" height="16" rx="3" class="c-mask"></rect><text x="1365" y="708" class="t-edge-default" font-size="8" text-anchor="middle">phase 2</text></g><g data-detail="context" data-edge-id="llm-orchestrator" data-edge-from="llm-service" data-edge-to="orchestrator" data-edge-label="Decision JSON" data-edge-key="19"><rect x="1163" y="191" width="111" height="16" rx="3" class="c-mask"></rect><text x="1218" y="202" class="t-edge-default" font-size="8" text-anchor="middle">Decision JSON</text></g><g data-detail="context" data-edge-id="task-output" data-edge-from="task-service" data-edge-to="output-service" data-edge-label="result / clarification" data-edge-key="21"><rect x="1078.15" y="457" width="63.7" height="16" rx="3" class="c-mask"></rect><text x="1110" y="468" class="t-edge-default" font-size="8" text-anchor="middle">result / clarification</text></g><g data-detail="context" data-edge-id="output-http-response" data-edge-from="output-service" data-edge-to="raspberry-pi" data-edge-label="HTTP VoiceResponse" data-edge-key="22" transform="rotate(-90 1517 700)"><rect x="1445.2" y="689" width="143.6" height="16" rx="3" class="c-mask"></rect><text x="1517" y="700" class="t-edge-default" font-size="8" text-anchor="middle">HTTP VoiceResponse</text></g><g data-graph-role="structural-frame-label" data-composition-frame-id="0" data-composition-frame-kind="region" data-composition-frame-label="Device / Hardware Layer">
           <rect data-graph-role="structural-frame-label-mask" x="24" y="71" width="147.82194928387096" height="17" rx="3" class="c-mask"></rect>
           <text data-boundary-label="" x="28" y="84.98709777419354" class="t-cloud" font-size="9.987097774193549" font-weight="600">Device / Hardware Layer</text>
         </g>
@@ -5351,7 +5345,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <text data-boundary-label="" x="642" y="962.9870977741936" class="t-cloud" font-size="9.987097774193549" font-weight="600">External Systems</text>
         </g>
 
-        
+
 
         <!-- Legend -->
         <g data-legend="" data-legend-bridge="">
@@ -5364,7 +5358,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             <rect x="145" y="1123" width="16" height="10" rx="2.5" class="c-backend" stroke-width="1"></rect>
             <text x="167" y="1132" class="t-muted" font-size="10" font-weight="500">Backend</text>
           </g>
-          
+
           <g data-legend-semantic-kind="cloud" data-legend-kind="cloud" data-legend-label="Cloud" data-legend-x="350" data-legend-baseline="1132" data-legend-width="68">
             <rect x="350" y="1123" width="16" height="10" rx="2.5" class="c-cloud" stroke-width="1"></rect>
             <text x="372" y="1132" class="t-muted" font-size="10" font-weight="500">Cloud</text>
@@ -5378,7 +5372,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
             <text x="582" y="1132" class="t-muted" font-size="10" font-weight="500">External</text>
           </g>
         </g>
-      </svg>
+</svg>
       <p class="intent-trace-status no-print" id="intent-trace-status" role="status" aria-live="polite" aria-atomic="true"></p>
       <div class="diagram-guide no-print" id="diagram-guide" hidden role="dialog" aria-modal="false" aria-labelledby="diagram-guide-title">
         <div class="diagram-guide-head">
@@ -5557,37 +5551,37 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       <div class="card">
         <div class="card-header">
           <div class="card-dot cyan"></div>
-          <h3>Primary request path</h3>
+          <h3>주요 요청 흐름</h3>
         </div>
         <ul>
-          <li>External Pi capture → HTTP voice upload → server STT / intent. LLM Service selects MCP tools when needed.</li>
-          <li>MCP Client → Orchestrator: validate AI / MCP results, then route Application Services. Clarification means no data mutation.</li>
-          <li>TaskService → TaskPort → EurekaTaskAdapter. OutputService creates TTS text / LCD content; Pi performs speech synthesis and hardware output.</li>
+          <li>Pi에서 녹음한 WAV를 FastAPI로 보냅니다. 백엔드는 기기 토큰과 WAV 형식을 검사합니다.</li>
+          <li>미완료 업무와 재질문 상태를 조회한 뒤, Gemini를 한 번 호출해 요청을 해석합니다.</li>
+          <li>백엔드는 해석 결과를 검증하고 업무를 등록·조회·완료하거나 재질문합니다. Pi는 HTTP 응답의 문장을 읽고 LCD에 표시합니다.</li>
         </ul>
       </div>
 
       <div class="card">
         <div class="card-header">
           <div class="card-dot amber"></div>
-          <h3>Deadline policy</h3>
+          <h3>마감 알림 정책</h3>
         </div>
         <ul>
-          <li>SchedulerAdapter periodically triggers ReminderService.</li>
-          <li>Completed tasks are excluded from reminder evaluation.</li>
-          <li>When no custom time exists, the default reminder is one hour before dueAt.</li>
-          <li>Deduplicated alert: OutputService → OutputPublisherPort → WebSocketAdapter → Pi. Persistence remains undecided.</li>
+          <li>업무 등록 시 마감 몇 분 전에 알릴지 SQLite에 저장합니다.</li>
+          <li>별도 지정이 없으면 기본값은 마감 60분 전입니다.</li>
+          <li>2차 설계에서는 완료된 업무를 제외하고, 같은 마감에 대한 중복 알림을 방지합니다.</li>
+          <li>WebSocket 연결과 PING/PONG은 구현되어 있습니다. 알림 판정과 재전송은 2차 범위입니다.</li>
         </ul>
       </div>
 
       <div class="card">
         <div class="card-header">
           <div class="card-dot violet"></div>
-          <h3>Port / adapter boundary</h3>
+          <h3>외부 연동 경계</h3>
         </div>
         <ul>
-          <li>TaskPort contains create_task, get_tasks, get_task_status, complete_task, and update_task.</li>
-          <li>EurekaTaskAdapter implements TaskPort. Runtime arrows lead to Eureka Process API, the task source of truth.</li>
-          <li>Normal response: OutputService → Raspberry Pi via HTTP. Server push: OutputPublisherPort → WebSocketAdapter.</li>
+          <li>업무 처리는 Eureka 클라이언트를 통해 미완료 업무 조회, 등록, 완료를 수행합니다.</li>
+          <li>실연동 모드에서는 Eureka Process API가 업무 원본입니다. 모의 모드는 메모리에 업무를 저장합니다.</li>
+          <li>일반 응답은 HTTP로 Pi에 반환합니다. 선제 알림 전송에는 WebSocket을 사용할 계획입니다.</li>
         </ul>
       </div>
     </div>
@@ -14574,7 +14568,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       var groupOrder = ['Hardware', 'STT', 'Lightweight Intent Model', 'Intent / LLM', 'Desk Pet Backend API', 'Eureka Process API', 'Output / WebSocket', 'Reminder Policy'];
       var groupKind = { 'Desk Pet Backend API': 'public', 'Eureka Process API': 'external' };
       var nodeGroups = {
-        hardware: ['Hardware'], 'audio-capture': ['Hardware'], stt: ['STT'], 'intent-model': ['Lightweight Intent Model'],
+        hardware: ['Hardware'], 'audio-capture': ['Hardware'], stt: ['Desk Pet Backend API', 'STT'], 'intent-model': ['Intent / LLM', 'Lightweight Intent Model'],
         orchestrator: ['Intent / LLM'], 'llm-service': ['Intent / LLM'], 'mcp-client': ['Intent / LLM'], 'task-service': ['Desk Pet Backend API'], 'task-port': ['Desk Pet Backend API'],
         'eureka-adapter': ['Eureka Process API'], 'eureka-api': ['Eureka Process API'], 'output-service': ['Output / WebSocket'],
         'output-port': ['Output / WebSocket'], 'websocket-adapter': ['Output / WebSocket'], 'raspberry-pi': ['Output / WebSocket'],
@@ -14588,6 +14582,67 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         '중복 알림 방지 후 필요 시 OutputService 호출 · 저장 구현체는 미확정',
         'SchedulerAdapter → ReminderService → OutputService → OutputPublisherPort → WebSocketAdapter → Raspberry Pi로 proactive_alert 전달'
       ];
+
+      var implementationNotes = {
+        'Hardware': '1차 구현: WAV 업로드와 동기 응답. 기존 하드웨어 계약의 Pi 입출력 책임을 유지한다.',
+        'STT': '이전 설계: 독립 STT 단계. 현재 services/ai.py에서 Gemini가 전사와 요청 해석을 한 번에 수행한다.',
+        'Lightweight Intent Model': '이전 설계: 별도 경량 Intent 단계. 현재 코드에는 해당 단계가 없다.',
+        'Intent / LLM': '현재 구현: tasks.py가 맥락을 모아 ai.py를 호출하고 Decision을 검증·실행한다. MCP 호출과 별도 Orchestrator는 설계안이다.',
+        'Desk Pet Backend API': '현재 구현: /api/voice, /api/text, /health. 아래 기존 /api/tasks CRUD와 TaskPort는 이전 설계 계약이다.',
+        'Eureka Process API': '현재 구현: eureka.py가 real HTTP 또는 in-memory mock을 선택한다. 등록·조회·완료를 업무 요청에서 사용한다.',
+        'Output / WebSocket': '현재 구현: 일반 응답은 HTTP VoiceResponse. WS 연결·PING/PONG은 구현됐으며 선제 알림 전달 흐름은 1차 제외다.',
+        'Reminder Policy': '현재 구현: 등록 시 offset_minutes만 저장한다. 아래 폴링·중복 방지·재전송 정책은 2차 설계다.'
+      };
+      var implementationContracts = {
+        'Intent / LLM': [{
+          interface: '현재 구현 · Gemini Decision',
+          endpoint: 'tasks.py → ai.py',
+          input: ['WAV 또는 text', 'KST 현재 시간, 미완료 업무 최대 30건, 유효한 pending'],
+          output: ['transcript: string', 'action: create_task | list_tasks | complete_task | update_due | set_reminder | clarify', 'args: name?, due_at?, offset_minutes?, item_id?, range?, candidates?', 'question?: string'],
+          processing: '구조화 JSON 한 번 생성. 백엔드가 등록·조회·완료·재질문을 처리한다.',
+          error: 'update_due와 set_reminder는 후보에 포함되며 실행 시 미지원 오류를 반환한다.'
+        }],
+        'Desk Pet Backend API': [{
+          interface: '현재 구현 · 음성·텍스트 요청',
+          endpoint: 'POST /api/voice · POST /api/text',
+          input: ['X-Device-Token 헤더', 'voice multipart: audio, user_id?, request_id?', 'text JSON: text, user_id?, request_id?'],
+          processing: '16kHz 모노 16비트 PCM WAV, 최대 15초·1,000,000바이트. user_id 기본값 default. request_id는 요청값을 그대로 반환하고 생략 시 생성한다.',
+          timeout: '코드: 업로드 뒤 tasks.handle 7초. 계약 초안: Backend 9초, Pi 10초 대기.',
+          error: '토큰 401, 용량·길이 초과 413, 형식 오류 422. 업무 처리 실패는 VoiceResponse의 ERROR.'
+        }, {
+          interface: '현재 구현 · 상태 확인',
+          endpoint: 'GET /health',
+          output: '{ "status": "ok" }',
+          note: '앱 응답 확인용이다. Eureka 또는 Gemini 연결 상태를 검사하지 않는다.'
+        }],
+        'Eureka Process API': [{
+          interface: '현재 구현 · 업무 조회·등록·완료',
+          endpoint: 'services/tasks.py → eureka.py',
+          input: ['조회: GET /_api_/items/0/list?sites&detail=true&limit=100', '등록: POST /_api_/items/0/start · processId, name, dueAt(epoch ms), priority=high', '완료: POST /_api_/items/{item_id}/complete'],
+          output: '내부 Task: item_id, name, due_at, status',
+          error: '원본 목록 100건 이상이면 완료 필터 전에 실패한다. 등록 요청에는 재시도 중복을 막는 멱등 처리가 없다.'
+        }],
+        'Output / WebSocket': [{
+          interface: '현재 구현 · 동기 응답',
+          endpoint: 'VoiceResponse',
+          output: ['request_id, status, stt_text?, type', 'output.tts, output.lcd? { expression, text }'],
+          processing: 'Pi가 TTS와 LCD를 출력한다. 백엔드는 업무별 템플릿으로 응답하고 재질문에는 질문 문구를 담는다.',
+          note: 'NO_SPEECH와 STT_ERROR는 스키마에 정의돼 있고 현재 처리 코드에는 반환 분기가 없다.'
+        }, {
+          interface: '부분 구현 · WS 연결 계약',
+          endpoint: '/ws/hardware/{user_id}',
+          input: 'X-Device-Token, PING',
+          output: 'connected 이벤트, PONG. 선제 알림 스키마는 ProactiveAlert(event, type, user_id, request_id, output).',
+          note: 'send_alert 함수는 있다. 폴러 시작, 알림 판정·재전송은 미연결 또는 미구현이다.'
+        }],
+        'Reminder Policy': [{
+          interface: '현재 구현 · SQLite 저장',
+          endpoint: 'tasks.py → db.py',
+          input: ['pending: user_id, Decision JSON, 만료 시각', 'reminders: item_id, offset_minutes'],
+          processing: '재질문 상태는 60초 보관하고 성공 시 삭제를 시도한다. 등록 시 Eureka 쓰기 뒤 알림 설정을 저장한다.',
+          note: 'alerts는 테이블 정의 단계다. SQLite 저장에 실패해도 먼저 등록된 Eureka 업무는 남는다.'
+        }]
+      };
 
       function addText(parent, tag, className, value) {
         var element = document.createElement(tag);
@@ -14638,6 +14693,11 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         group.appendChild(summary);
         var list = document.createElement('div');
         list.className = 'interface-contracts-list';
+        addText(list, 'div', 'interface-contract-group-note', implementationNotes[name]);
+        (implementationContracts[name] || []).forEach(function (contract) {
+          list.appendChild(renderContract(contract));
+        });
+        addText(list, 'div', 'interface-contract-group-note', '기존 설계 인터페이스');
         if (name === 'Reminder Policy') {
           var note = document.createElement('div');
           note.className = 'interface-contract-group-note';
@@ -14677,7 +14737,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         var copy = document.createElement('div');
         addText(copy, 'span', 'interface-contracts-eyebrow', 'Contract view');
         addText(copy, 'h2', '', 'Interface Contracts');
-        addText(copy, 'p', 'interface-contracts-context', 'JSON 명세를 현재 확정 아키텍처의 컴포넌트·Port·Adapter 경계에 맞춰 정리한 상세 패널입니다.');
+        addText(copy, 'p', 'interface-contracts-context', '기존 설계 인터페이스와 현재 구현을 그룹별로 대조했습니다. 구현 기준은 백엔드 b3911fe와 knowledge의 architecture.md · contracts.md입니다.');
         head.appendChild(copy);
         var close = document.createElement('button');
         close.className = 'interface-contracts-close';
@@ -14691,7 +14751,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         panel.appendChild(groups);
         var meta = document.createElement('div');
         meta.className = 'interface-contracts-meta';
-        addText(meta, 'span', '', '21 contracts / events');
+        addText(meta, 'span', '', '기존 계약·이벤트 21개 + 현재 구현 대조');
         addText(meta, 'span', '', '/api/* = Desk Pet Backend API');
         addText(meta, 'span', '', '/_api_/* = Eureka Process API');
         panel.appendChild(meta);
@@ -14731,7 +14791,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           group.open = names.indexOf(group.getAttribute('data-contract-group')) >= 0;
         });
         var context = panel.querySelector('.interface-contracts-context');
-        if (context) context.textContent = '선택한 노드: ' + nodeId + ' · 관련 Interface Contract 그룹을 열었습니다.';
+        if (context) context.textContent = '선택한 노드: ' + nodeId + ' · 현재 구현 대조와 기존 설계 계약을 함께 표시합니다.';
         panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
 

@@ -1,11 +1,10 @@
-# docs/ (임시 보관)
+# 백엔드 문서
 
-설계 문서의 최종 위치는 knowledge 레포 `projects/eureka-desk-pet/`다 (`hansung-capstone-team-6-clear/knowledge`).
+이 폴더는 현재 코드 기준 백엔드 구현을 설명한다. 시스템 설계와 레이어 간 계약은 knowledge 레포의 `projects/eureka-desk-pet/`에서 관리한다.
 
-| 이 폴더 문서 | 대체하는 knowledge 문서 |
+| 백엔드 문서 | knowledge 기준 문서 |
 | --- | --- |
-| `architecture/backend_architecture.*` | `projects/eureka-desk-pet/architecture.md` |
-| `interfaces/backend_interfaces.md` | `projects/eureka-desk-pet/contracts.md` |
+| [아키텍처](architecture/backend_architecture.md) · [레이어 도식](architecture/backend_architecture.html) | `architecture.md` |
+| [인터페이스](interfaces/backend_interfaces.md) | `contracts.md` |
 
-- 이 폴더의 문서는 이전 설계(헥사고날, MCP, 경량 Intent)를 기준으로 한다. 새 작업은 knowledge 문서를 따른다.
-- knowledge 레포의 desk-pet 문서가 merge되면 이 폴더를 지운다.
+레이어 도식의 CONTRACTS 패널에는 기존 설계 명세와 현행 구현 비교가 함께 들어 있다.

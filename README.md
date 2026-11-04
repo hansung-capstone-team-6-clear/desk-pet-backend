@@ -10,7 +10,7 @@
 
 | 한다 | 하지 않는다 (Hardware 레포가 함) |
 | --- | --- |
-| `/api/voice`·`/api/text` 요청 처리, LLM 1회 호출, Eureka 호출, 마감 알림 판단·전송, SQLite 저장 | 녹음, TTS, 재생, LED·LCD 표시 |
+| `/api/voice`·`/api/text` 요청 처리, LLM 1회 호출, Eureka 호출, SQLite 저장 | 녹음, TTS, 재생, LED·LCD 표시 |
 
 ## 폴더 구조
 
@@ -21,12 +21,12 @@ desk-pet-backend/
 │   ├── config.py           환경 변수
 │   ├── schemas.py          주고받는 데이터 모양 (contracts.md를 코드로)
 │   ├── api/                ① 입구: /api/voice, /api/text, /ws/hardware/{user_id}
-│   ├── services/           ② 규칙·흐름: tasks(요청 처리), ai(LLM), reminder(마감 알림)
+│   ├── services/           ② 규칙·흐름: tasks(요청 처리), ai(LLM), reminder(2차 알림, 미연결)
 │   ├── eureka.py           ③ 바깥 연결: Eureka API + 개발용 mock
 │   └── db.py               ③ 바깥 연결: SQLite
 ├── tests/                  자동 테스트, AI 평가셋, Eureka PoC 스크립트 — tests/README.md
 ├── mocks/                  이전 단계 Mock 서버 (참고용) — mocks/README.md
-├── docs/                   이전 설계 문서 (knowledge로 이전 중) — docs/README.md
+├── docs/                   백엔드 구현 문서 및 도식 — docs/README.md
 ├── .env.example            환경 변수 목록 (복사해서 .env로)
 ├── Dockerfile, docker-compose.yml
 └── pyproject.toml          의존성, pytest·ruff 설정
@@ -77,10 +77,9 @@ docker compose up --build
 | 10/18 | LLM 호출 + 평가셋 20개 | `services/ai.py`, `tests/eval/` | ai |
 | 10/18 | `/api/text` 요청 처리 | `services/tasks.py`, `api/voice.py` | backend |
 | 10/31 | `/api/voice` 음성 요청 | `api/voice.py`, `services/tasks.py` | backend |
-| 11/14 | 마감 알림 | `services/reminder.py`, `api/ws.py`, `main.py` | backend |
 
 이미 동작하는 것: `/health`, 토큰 확인, `WS /ws/hardware/{user_id}` connected·PING/PONG, `EurekaMock`, SQLite 테이블 생성, 시간 변환.
-Hardware 쪽은 지금 바로 WS 연결 테스트를 할 수 있다.
+WS 연결 확인은 가능하다. 2026-10-29 결정에 따라 선제 알림은 2차 범위이며, 알림 판단·재전송과 앱 시작 시 폴러 연결은 미구현이다.
 
 ## 작업 규칙
 

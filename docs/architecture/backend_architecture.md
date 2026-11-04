@@ -1,161 +1,33 @@
-﻿# Desk Pet Backend Architecture
+# Desk Pet 백엔드 아키텍처
 
-## 1. Overview
+이 문서는 현재 백엔드 코드의 1차 MVP 구현을 설명한다. 시스템 설계와 레이어 간 계약은 knowledge 레포의 `projects/eureka-desk-pet/architecture.md`와 `contracts.md`에서 관리한다. [인터페이스 명세](../interfaces/backend_interfaces.md) · [레이어 도식](backend_architecture.html)
 
-Desk Pet Backend는 Raspberry Pi 기반 AI 데스크 펫의 음성 명령, 업무 관리, 마감 알림 및 하드웨어 출력을 조정하는 서버이다.
+## 레이어와 책임
 
-- FastAPI 기반 HTTP API
-- 서버 STT 및 경량 Intent 분석
-- LLM / MCP 도구 호출
-- Eureka Process 업무 연동
-- Polling 기반 마감 알림
-- WebSocket 기반 선제적 알림
+| 경계 | 구현과 역할 |
+| --- | --- |
+| Raspberry Pi | PTT로 녹음하고 WAV를 전송한다. 응답을 TTS로 재생하고 LCD·LED에 표시한다. |
+| FastAPI | `api/voice.py`에서 디바이스 토큰과 입력을 검증한 뒤 `tasks.handle()`을 호출한다. `main.py`는 `GET /health`를 제공한다. |
+| 업무 처리 | `services/tasks.py`가 업무와 재질문 맥락을 읽고 AI 결과를 검증한다. 등록·조회·완료·재질문과 응답 문구를 처리한다. |
+| 요청 해석 | `services/ai.py`가 Gemini에 오디오 또는 텍스트와 맥락을 보내 구조화된 `Decision`을 한 번 받는다. |
+| 외부 연동 | `eureka.py`가 실연동 HTTP와 메모리 모의 구현을 선택한다. 실연동에서는 Eureka가 업무 원본이다. |
+| 저장 | `db.py`가 SQLite에 재질문 상태와 알림 오프셋을 저장한다. |
 
-## 2. Architecture Layers
+## 요청 흐름
 
-| Layer | Components | Responsibility |
-|---|---|---|
-| Device / Hardware | Raspberry Pi, PTT, Microphone, LED, LCD, Speaker | 음성 입력 및 출력 |
-| Local Processing | Audio Capture | WAV 녹음 및 전송 |
-| Application | STT, Intent, LLM, Orchestrator, Services | 요청 분석 및 업무 처리 |
-| Ports | TaskPort, OutputPublisherPort | 외부 시스템 추상화 |
-| Infrastructure | EurekaTaskAdapter, WebSocketAdapter, SchedulerAdapter | 외부 연동 및 스케줄링 |
-| External | Eureka Process API | 업무 데이터 관리 |
+1. Pi는 `POST /api/voice`로 WAV를 보낸다. 개발·평가에서는 `POST /api/text`로 같은 업무 처리 흐름을 호출한다.
+2. 백엔드는 토큰과 입력을 확인한다. 업로드·검증 뒤 시작되는 업무 처리에는 7초 제한이 있다.
+3. `tasks.py`가 Eureka 미완료 업무와 SQLite의 `pending`을 조회한다. Gemini에는 업무를 최대 30건 전달한다.
+4. Gemini의 `Decision`을 검증해 등록·조회·완료·재질문을 처리한다. 등록은 Eureka에 쓴 뒤 SQLite에 알림 오프셋을 저장한다. 재질문은 사용자별 `Decision`을 60초 보관한다.
+5. `VoiceResponse`를 HTTP로 반환한다. 일반 문구는 템플릿으로 만들고, 재질문에는 질문 문구를 담는다.
 
-## 3. Voice Processing
+## 2차 선제 알림
 
-User / PTT
-→ Raspberry Pi Audio Capture
-→ POST /api/voice
-→ Server STT
-→ Lightweight Intent Model
-→ Intent / LLM Orchestrator
-→ Application Services
+`api/ws.py`에는 토큰 검사, 연결 관리, `connected`, PING/PONG, `send_alert()`가 있다. 일반 업무 응답은 HTTP로 반환한다. 선제 알림은 1차에서 제외했다. `reminder.py`의 알림 판단·재전송은 미구현이고, 앱 시작 시 폴러를 연결하지 않았다. `alerts`는 테이블 정의 단계다.
 
-- STT는 서버에서 음성을 텍스트로 변환한다.
-- Intent Model은 의도, 신뢰도, 매개변수를 분석한다.
-- 복잡하거나 신뢰도가 낮은 요청은 LLM Service로 전달한다.
-- LLM Service는 필요할 경우 MCP Client를 사용한다.
-- Orchestrator는 AI/MCP 결과를 검증하고 서비스를 호출한다.
-- 추가 확인이 필요한 경우 데이터 변경 없이 확인 응답을 반환한다.
+## 구현상 제약
 
-## 4. Application Services
-
-### TaskService
-- create_task
-- get_tasks
-- get_task_status
-- complete_task
-- update_task
-
-### ReminderService
-- 마감 시간 확인
-- 사용자 지정 알림 시간 적용
-- 기본 마감 1시간 전 알림
-- 완료된 업무 제외
-- 중복 알림 방지
-
-### OutputService
-- 사용자 응답 생성
-- TTS 텍스트 생성
-- LCD 출력 내용 생성
-- 출력 명령 전달
-
-## 5. Ports & Adapters
-
-### TaskPort
-업무 관리 시스템 접근을 추상화한다.
-
-TaskService
-→ TaskPort
-→ EurekaTaskAdapter
-→ Eureka Process API
-
-Eureka Process는 업무 데이터의 Source of Truth이다.
-
-### OutputPublisherPort
-서버에서 시작되는 비동기 하드웨어 출력을 추상화한다.
-
-OutputService
-→ OutputPublisherPort
-→ WebSocketAdapter
-→ Raspberry Pi
-
-## 6. Reminder Workflow
-
-SchedulerAdapter
-→ ReminderService
-→ TaskPort
-→ EurekaTaskAdapter
-→ Eureka Process API
-
-알림 조건 충족 시:
-
-ReminderService
-→ OutputService
-→ OutputPublisherPort
-→ WebSocketAdapter
-→ Raspberry Pi
-
-### Reminder Policy
-- 기본 알림: 마감 60분 전
-- 사용자 지정 알림 시간 우선
-- 완료된 업무 알림 제외
-- 동일 알림 중복 발송 방지
-- 마감 시간 변경 시 알림 조건 재평가
-- 알림 상태 영속화 방식은 미확정
-
-## 7. Output Communication
-
-### Normal Response
-OutputService
-→ HTTP Response
-→ Raspberry Pi
-
-### Proactive Alert
-OutputService
-→ OutputPublisherPort
-→ WebSocketAdapter
-→ Raspberry Pi
-
-WebSocket 메시지 유형:
-- output
-- proactive_alert
-
-Raspberry Pi는 Edge-TTS로 음성을 합성하고 LED, LCD, Speaker를 제어한다.
-
-## 8. Backend API
-
-| Method | Endpoint | Responsibility |
-|---|---|---|
-| POST | /api/voice | 음성 입력 처리 |
-| POST | /api/tasks | 업무 등록 |
-| GET | /api/tasks | 업무 목록 조회 |
-| GET | /api/tasks/{id}/status | 업무 상태 확인 |
-| POST | /api/tasks/{id}/complete | 업무 완료 |
-| PUT | /api/tasks/{id} | 업무 수정 |
-
-## 9. Project Structure
-
-src/desk_pet_backend/
-- api/ : HTTP 및 WebSocket API
-- application/services/ : 비즈니스 유스케이스
-- application/ports/ : 인터페이스 정의
-- domain/models/ : 도메인 모델
-- domain/enums/ : 도메인 상태
-- infrastructure/eureka/ : Eureka API 연동
-- infrastructure/websocket/ : 실시간 출력
-- infrastructure/scheduler/ : Polling 실행
-- config/ : 환경 설정
-
-## 10. Development Status
-
-- Architecture: 설계 완료
-- Eureka API: 기존 연동 테스트 수행
-- Mock Server: 기존 테스트 서버 보유
-- Backend Application: 구현 예정
-- Scheduler / WebSocket: 구현 예정
-- Persistence: 설계 미확정
-
-이 문서는 backend_architecture.html에 정의된 설계를 기준으로 작성한다.
-실제 구현 및 테스트 완료 여부는 별도로 관리한다.
+- 실연동 목록은 원본 100건 이상이면 완료 필터 전에 오류가 난다. 페이지 처리 방식은 확인이 필요하다.
+- `request_id`는 추적용이다. Eureka 등록 뒤 오류가 나면 재요청으로 중복 등록될 수 있다.
+- `update_due`·`set_reminder`와 `NO_SPEECH`·`STT_ERROR`는 스키마에 정의돼 있지만 해당 처리 분기는 없다.
+- 위 내용은 코드 기준이다. 배포 서버와 실제 Pi·Gemini·Eureka 연동 상태는 별도로 검증한다.
