@@ -5095,7 +5095,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <text data-detail="context" x="590" y="150" class="t-muted" font-size="9" text-anchor="middle">Raspberry Pi · WAV recording</text>
         </g>
 
-        <g id="node-stt" data-node-id="stt" data-node-label="FastAPI · api/voice.py" tabindex="0" role="button" aria-label="FastAPI · api/voice.py · Device token · WAV validation" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Device token · WAV validation" data-node-context="Application Layer · server-side STT">
+        <g id="node-stt" data-node-id="stt" data-node-label="FastAPI · api/voice.py" tabindex="0" role="button" aria-label="FastAPI · api/voice.py · Device token · WAV validation" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Device token · WAV validation" data-node-context="Application Layer · request entry">
           <title>FastAPI · api/voice.py · Device token · WAV validation</title>
           <rect x="730" y="100" width="170" height="72" rx="6" class="c-mask"></rect>
           <rect x="730" y="100" width="170" height="72" rx="6" class="c-backend" stroke-width="1.5"></rect>
@@ -5104,7 +5104,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           </g>
           <text data-node-label="" data-detail-anchor="" x="815" y="134" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">FastAPI · api/voice.py</text>
         <text data-detail="context" x="815" y="150" class="t-muted" font-size="9" text-anchor="middle">Device token · WAV validation</text>
-        </g><g id="node-llm-service" data-node-id="llm-service" data-node-label="Gemini" tabindex="0" role="button" aria-label="Gemini · Audio or text" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Audio or text · Structured Decision JSON" data-node-context="Application Layer · conditional LLM analysis" data-node-tag="taskName / dueAt / priority / reminderAt; ambiguity detection; MCP tool selection; no direct mutation">
+        </g><g id="node-llm-service" data-node-id="llm-service" data-node-label="Gemini" tabindex="0" role="button" aria-label="Gemini · Audio or text" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Audio or text · Structured Decision JSON" data-node-context="External Systems · LLM analysis" data-node-tag="transcript / action / args / question; ambiguity detection; no direct mutation">
           <title>Gemini · Audio or text</title>
           <rect x="970" y="270" width="220" height="60" rx="6" class="c-mask"></rect>
           <rect x="970" y="270" width="220" height="60" rx="6" class="c-backend" stroke-width="1.5"></rect>
@@ -5115,7 +5115,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <text data-detail="context" x="1080" y="312" class="t-muted" font-size="8.5" text-anchor="middle"><tspan x="1080" y="310">Audio or text</tspan><tspan x="1080" y="323">Structured Decision JSON</tspan></text>
         </g><g id="node-mcp-client" data-node-id="mcp-client" data-node-label="MCP · legacy design" tabindex="0" role="button" aria-label="MCP · legacy design · Historical interface only" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Historical interface only" data-node-context="Application Layer · integration client" data-node-tag="Tool selection from LLM; task mutations delegated to Orchestrator and Application Services; no direct Eureka access"><title>MCP · legacy design · Historical interface only</title><rect x="1220" y="265" width="145" height="60" rx="6" class="c-mask" stroke-width="1.5"></rect><rect x="1220" y="265" width="145" height="60" rx="6" class="c-backend" stroke-width="1.5"></rect><text data-node-label="" data-detail-anchor="" x="1292.5" y="282" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">MCP · legacy design</text><text data-detail="context" x="1292.5" y="300" class="t-muted" font-size="8" text-anchor="middle">Historical interface only</text></g>
 
-        <g id="node-intent-model" data-node-id="intent-model" data-node-label="Request context · tasks.py" tabindex="0" role="button" aria-label="Request context · tasks.py · Open tasks · pending · 7s handler" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Open tasks · pending · 7s handler" data-node-context="Application Layer · server-side intent analysis">
+        <g id="node-intent-model" data-node-id="intent-model" data-node-label="Request context · tasks.py" tabindex="0" role="button" aria-label="Request context · tasks.py · Open tasks · pending · 7s handler" aria-pressed="false" data-node-kind="backend" data-node-sublabel="Open tasks · pending · 7s handler" data-node-context="Application Layer · request context">
           <title>Request context · tasks.py · Open tasks · pending · 7s handler</title>
           <rect x="950" y="92" width="220" height="88" rx="6" class="c-mask"></rect>
           <rect x="950" y="92" width="220" height="88" rx="6" class="c-backend" stroke-width="1.5"></rect>
@@ -5126,7 +5126,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <text data-detail="context" x="1060" y="150" class="t-muted" font-size="9" text-anchor="middle">Open tasks · pending · 7s handler</text>
         </g>
 
-        <g id="node-orchestrator" data-node-id="orchestrator" data-node-label="Analyze · ai.py" tabindex="0" role="button" aria-label="Analyze · ai.py · One Gemini call · structured Decision" aria-pressed="false" data-node-kind="backend" data-node-sublabel="One Gemini call · structured Decision" data-node-context="Application Layer" data-node-tag="validate AI analysis and MCP results; route Application Services; clarification → no data mutation">
+        <g id="node-orchestrator" data-node-id="orchestrator" data-node-label="Analyze · ai.py" tabindex="0" role="button" aria-label="Analyze · ai.py · One Gemini call · structured Decision" aria-pressed="false" data-node-kind="backend" data-node-sublabel="One Gemini call · structured Decision" data-node-context="Application Layer" data-node-tag="Gemini call and Decision parsing; tasks.py validates and executes; clarification → no data mutation">
           <title>Analyze · ai.py · One Gemini call · structured Decision</title>
           <rect x="1220" y="92" width="230" height="88" rx="6" class="c-mask"></rect>
           <rect x="1220" y="92" width="230" height="88" rx="6" class="c-backend" stroke-width="1.5"></rect>
@@ -5148,7 +5148,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <text data-detail="context" x="775" y="407" class="t-muted" font-size="8.8" text-anchor="middle">Validate · create · list · complete</text>
         </g>
 
-        <g id="node-reminder-service" data-node-id="reminder-service" data-node-label="SQLite · db.py" tabindex="0" role="button" aria-label="SQLite · db.py · pending 60s · reminder offset" aria-pressed="false" data-node-kind="backend" data-node-sublabel="pending 60s · reminder offset" data-node-context="Application Layer">
+        <g id="node-reminder-service" data-node-id="reminder-service" data-node-label="SQLite · db.py" tabindex="0" role="button" aria-label="SQLite · db.py · pending 60s · reminder offset" aria-pressed="false" data-node-kind="backend" data-node-sublabel="pending 60s · reminder offset" data-node-context="Storage · SQLite">
           <title>SQLite · db.py · pending 60s · reminder offset</title>
           <rect x="950" y="350" width="240" height="86" rx="6" class="c-mask"></rect>
           <rect x="950" y="350" width="240" height="86" rx="6" class="c-backend" stroke-width="1.5"></rect>

@@ -19,7 +19,7 @@
   "stt_text": "오늘 업무 알려 줘",
   "type": "task_list",
   "output": {
-    "tts": "오늘 마감인 미완료 업무가 없어요.",
+    "tts": "해당 기간에 미완료 업무가 없어요.",
     "lcd": { "expression": "speaking", "text": "업무 0건" }
   }
 }
