@@ -4980,7 +4980,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <div class="pulse-dot"></div>
         <h1>Desk Pet Backend Architecture</h1>
       </div>
-      <p class="subtitle">현행 MVP · 점선은 2차 선제 알림 · 기존 명세 및 현행 인터페이스는 CONTRACTS</p>
+      <p class="subtitle">현행 MVP · 점선은 삭제 예정인 이전 알림 설계 · 기존 명세 및 현행 인터페이스는 CONTRACTS</p>
     </div>
 
 
@@ -5568,8 +5568,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <ul>
           <li>업무 등록 시 마감 몇 분 전에 알릴지 SQLite에 저장합니다.</li>
           <li>별도 지정이 없으면 기본값은 마감 60분 전입니다.</li>
-          <li>2차 설계에서는 완료된 업무를 제외하고, 같은 마감에 대한 중복 알림을 방지합니다.</li>
-          <li>WebSocket 연결과 PING/PONG은 구현되어 있습니다. 알림 판정과 재전송은 2차 범위입니다.</li>
+          <li>2026-11-06 결정(구현 전): Pi가 GET /api/tasks로 목록을 받아 스스로 알람을 울리고 보낸 기록을 저장합니다.</li>
+          <li>WebSocket과 reminder.py는 이전 설계이며 구현 때 삭제합니다.</li>
         </ul>
       </div>
 
@@ -5581,7 +5581,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <ul>
           <li>업무 처리는 Eureka 클라이언트를 통해 미완료 업무 조회, 등록, 완료를 수행합니다.</li>
           <li>실연동 모드에서는 Eureka Process API가 업무 원본입니다. 모의 모드는 메모리에 업무를 저장합니다.</li>
-          <li>일반 응답은 HTTP로 Pi에 반환합니다. 선제 알림 전송에는 WebSocket을 사용할 계획입니다.</li>
+          <li>일반 응답은 HTTP로 Pi에 반환합니다. 업무 목록은 서버 시작 시·하루 1회 조회해 캐시하기로 했습니다(구현 전).</li>
         </ul>
       </div>
     </div>
@@ -14575,12 +14575,11 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         'reminder-service': ['Reminder Policy'], scheduler: ['Reminder Policy']
       };
       var reminderPolicy = [
-        'Polling 사용 · SchedulerAdapter는 주기 실행만 담당',
-        'completed 업무 제외',
-        '사용자 지정 reminder가 있으면 해당 값 사용',
-        '없으면 기본 dueAt 1시간 전',
-        '중복 알림 방지 후 필요 시 OutputService 호출 · 저장 구현체는 미확정',
-        'SchedulerAdapter → ReminderService → OutputService → OutputPublisherPort → WebSocketAdapter → Raspberry Pi로 proactive_alert 전달'
+        '2026-11-06 결정(구현 전): Polling·WebSocket 대신 Pi 자체 알람',
+        'GET /api/tasks로 미완료 업무의 이름·마감·알림 간격 전달',
+        '사용자 지정 간격이 있으면 해당 값 사용',
+        '없으면 기본 마감 60분 전',
+        'Pi가 시간 확인, 알림 재생, LCD 표시, 보낸 기록 저장, 재부팅 후 복구'
       ];
 
       var implementationNotes = {
@@ -14588,10 +14587,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         'STT': '이전 설계: 독립 STT 단계. 현재 services/ai.py에서 Gemini가 전사와 요청 해석을 한 번에 수행한다.',
         'Lightweight Intent Model': '이전 설계: 별도 경량 Intent 단계. 현재 코드에는 해당 단계가 없다.',
         'Intent / LLM': '현재 구현: tasks.py가 맥락을 모아 ai.py를 호출하고 Decision을 검증·실행한다. MCP 호출과 별도 Orchestrator는 설계안이다.',
-        'Desk Pet Backend API': '현재 구현: /api/voice, /api/text, /health. 아래 기존 /api/tasks CRUD와 TaskPort는 이전 설계 계약이다.',
-        'Eureka Process API': '현재 구현: eureka.py가 real HTTP 또는 in-memory mock을 선택한다. 등록·조회·완료를 업무 요청에서 사용한다.',
-        'Output / WebSocket': '현재 구현: 일반 응답은 HTTP VoiceResponse. WS 연결·PING/PONG은 구현됐으며 선제 알림 전달 흐름은 1차 제외다.',
-        'Reminder Policy': '현재 구현: 등록 시 offset_minutes만 저장한다. 아래 폴링·중복 방지·재전송 정책은 2차 설계다.'
+        'Desk Pet Backend API': '현재 구현: /api/voice, /api/text, /health. 아래 기존 /api/tasks CRUD와 TaskPort는 이전 설계 계약이다. 조회용 GET /api/tasks는 구현 예정이다(contracts § 2).',
+        'Eureka Process API': '현재 구현: eureka.py가 real HTTP 또는 in-memory mock을 선택한다. 등록·조회·수정·완료를 업무 요청에서 사용한다. 목록 캐시는 구현 예정이다(contracts § 4).',
+        'Output / WebSocket': '현재 구현: 일반 응답은 HTTP VoiceResponse. WS 연결·PING/PONG 코드는 이전 설계이며 삭제 예정이다.',
+        'Reminder Policy': '현재 구현: 등록 시 offset_minutes만 저장한다. Pi 자체 알람으로 구현할 예정이다.'
       };
       var implementationContracts = {
         'Intent / LLM': [{
@@ -14607,7 +14606,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           endpoint: 'POST /api/voice · POST /api/text',
           input: ['X-Device-Token 헤더', 'voice multipart: audio, user_id?, request_id?', 'text JSON: text, user_id?, request_id?'],
           processing: '16kHz 모노 16비트 PCM WAV, 최대 15초·1,000,000바이트. user_id 기본값 default. request_id는 요청값을 그대로 반환하고 생략 시 생성한다.',
-          timeout: '코드: 업로드 뒤 tasks.handle 7초. 계약 초안: Backend 9초, Pi 10초 대기.',
+          timeout: '코드: 업로드 뒤 tasks.handle 7초, Pi 10초 대기. 결정(구현 전): Pi 10초 지연 안내, 20초 실패.',
           error: '토큰 401, 용량·길이 초과 413, 형식 오류 422. 업무 처리 실패는 VoiceResponse의 ERROR.'
         }, {
           interface: '현재 구현 · 상태 확인',
@@ -14616,9 +14615,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           note: '앱 응답 확인용이다. Eureka 또는 Gemini 연결 상태를 검사하지 않는다.'
         }],
         'Eureka Process API': [{
-          interface: '현재 구현 · 업무 조회·등록·완료',
+          interface: '현재 구현 · 업무 조회·등록·수정·완료',
           endpoint: 'services/tasks.py → eureka.py',
-          input: ['조회: GET /_api_/items/0/list?sites&detail=true&limit=100', '등록: POST /_api_/items/0/start · processId, name, dueAt(epoch ms), priority=high', '완료: POST /_api_/items/{item_id}/complete'],
+          input: ['조회: GET /_api_/items/0/list?sites&detail=true&limit=100', '등록: POST /_api_/items/0/start · processId, name, dueAt(epoch ms), priority=high', '수정: PUT /_api_/items/{item_id} · dueAt(epoch ms)', '완료: POST /_api_/items/{item_id}/complete'],
           output: '내부 Task: item_id, name, due_at, status',
           error: '원본 목록 100건 이상이면 완료 필터 전에 실패한다. 등록 요청에는 재시도 중복을 막는 멱등 처리가 없다.'
         }],
@@ -14629,11 +14628,11 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           processing: 'Pi가 TTS와 LCD를 출력한다. 백엔드는 업무별 템플릿으로 응답하고 재질문에는 질문 문구를 담는다.',
           note: 'NO_SPEECH와 STT_ERROR는 스키마에 정의돼 있고 현재 처리 코드에는 반환 분기가 없다.'
         }, {
-          interface: '부분 구현 · WS 연결 계약',
+          interface: '삭제 예정 · WS 연결',
           endpoint: '/ws/hardware/{user_id}',
           input: 'X-Device-Token, PING',
-          output: 'connected 이벤트, PONG. 선제 알림 스키마는 ProactiveAlert(event, type, user_id, request_id, output).',
-          note: 'send_alert 함수는 있다. 폴러 시작, 알림 판정·재전송은 미연결 또는 미구현이다.'
+          output: 'connected 이벤트, PONG.',
+          note: '이전 알림 설계의 코드다. Pi 자체 알람으로 바뀌어 구현 때 삭제한다.'
         }],
         'Reminder Policy': [{
           interface: '현재 구현 · SQLite 저장',

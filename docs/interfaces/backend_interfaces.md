@@ -10,7 +10,7 @@
 | `POST /api/text` | JSON의 `text`, 선택 `user_id`·`request_id` | `VoiceResponse` |
 | `GET /health` | 입력 없음 | `{"status":"ok"}`. 앱 응답 확인용 |
 
-두 POST는 `X-Device-Token`이 필요하다. WAV는 16kHz, 모노, 16비트 PCM, 최대 15초 및 1,000,000바이트다. 토큰 오류는 401, 크기·길이 초과는 413, 입력 형식 오류는 422다. `user_id` 생략 시 `default`를 사용한다. `request_id`는 받은 값을 돌려주고 생략 시 생성한다. 업로드·검증 뒤 업무 처리는 7초 제한이며, 계약 초안은 백엔드 응답 상한 9초와 Pi 대기 10초를 명시한다.
+두 POST는 `X-Device-Token`이 필요하다. WAV는 16kHz, 모노, 16비트 PCM, 최대 15초 및 1,000,000바이트다. 토큰 오류는 401, 크기·길이 초과는 413, 입력 형식 오류는 422다. `user_id` 생략 시 `default`를 사용한다. `request_id`는 받은 값을 돌려주고 생략 시 생성한다. 업로드·검증 뒤 업무 처리는 7초 제한이고 Pi는 10초를 기다린다. 2026-11-06에 Pi 10초 지연 안내·20초 실패로 바꾸기로 했다 (구현 전, `contracts.md` § 1).
 
 ```json
 {
@@ -46,12 +46,14 @@
 | 조회 | `GET /_api_/items/0/list?sites&detail=true&limit=100`. 원본 100건 이상이면 오류. `done` 제외 |
 | 등록 | `POST /_api_/items/0/start`. `processId`·`name`·`dueAt`·`priority=high` |
 | 완료 | `POST /_api_/items/{item_id}/complete` |
-| 마감 변경 | `PUT /_api_/items/{item_id}`. `dueAt`. 실제 API 응답 검증 전 |
+| 마감 변경 | `PUT /_api_/items/{item_id}`. `dueAt` |
 
-실연동 클라이언트의 단건 상태 조회는 미구현이다.
+실연동 클라이언트의 단건 상태 조회는 미구현이다. 지금은 요청마다 목록을 조회한다. 2026-11-06에 서버 시작 시·하루 1회 조회 후 캐시로 바꾸기로 했다 (구현 전, `contracts.md` § 4).
 
-## Backend ↔ Pi WebSocket
+## Pi → Backend 업무 목록 (구현 전)
 
-`/ws/hardware/{user_id}`에 `X-Device-Token`을 전달한다. 토큰 오류 시 1008로 닫는다. 연결 시 `{"event":"connected","user_id":"…"}`, 텍스트 `PING`에는 `{"event":"PONG"}`을 반환한다.
+2026-11-06 결정이다. `GET /api/tasks`에 `X-Device-Token`을 전달하면 미완료 업무의 `item_id`, `name`, `due_at`, `offset_minutes`를 돌려준다. Pi는 이 목록으로 스스로 마감 알람을 울린다. 응답 예시는 `contracts.md` § 2에 있다.
 
-선제 알림은 2차 범위다. `ProactiveAlert`의 필드는 `event=proactive_alert`, `type=deadline_approaching`, `user_id`, `request_id`, `output`이다. 전송 함수는 있으나 폴링과 재전송은 연결되지 않았다.
+## 삭제 예정: WebSocket
+
+`/ws/hardware/{user_id}`에 `X-Device-Token`을 전달한다. 토큰 오류 시 1008로 닫는다. 연결 시 `{"event":"connected","user_id":"…"}`, 텍스트 `PING`에는 `{"event":"PONG"}`을 반환한다. Pi 자체 알람으로 바뀌어 쓰지 않으며, 구현 때 삭제한다.

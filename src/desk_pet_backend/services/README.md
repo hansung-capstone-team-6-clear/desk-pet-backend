@@ -8,7 +8,9 @@
 | --- | --- | --- | --- |
 | `tasks.py` | 요청 하나 처리: 업무 목록 조회 → `ai.analyze()` → 정책 검증 → Eureka 실행 → 응답 문장 | backend | 10/18 (`/api/text`), 10/31 (`/api/voice`) |
 | `ai.py` | LLM 1회 호출 → `Decision` | ai | 10/18 |
-| `reminder.py` | 60초마다 마감 확인 → 알림 전송·기록, 재연결 시 재전송 | backend | 11/14 |
+| `reminder.py` | 이전 알림 설계의 뼈대. Pi 자체 알람으로 바뀌어 **삭제 예정** (2026-11-06) | backend | - |
+
+구현 예정: 업무 목록 캐시 (서버 시작 시·하루 1회 조회, 쓰기 후 갱신). 규칙은 knowledge 레포 `contracts.md` § 4.
 
 ## 규칙
 
@@ -19,10 +21,8 @@
 
 ## LLM SDK 추가 (ai 담당)
 
-LLM 방식은 아직 결정 전이다: 멘토 제안은 Gemini Flash-Lite 무료 등급(1차 비용 0원), 팀 10/07 결정은 서버 Local LLM
-(knowledge 레포 `projects/eureka-desk-pet/contracts.md` § 3, `ai/README.md`). 입출력 형식은 어느 쪽이든 같다.
-모델을 확정하면 `pyproject.toml`의 `dependencies`에 SDK를 추가하고, `.env.example`의 `LLM_MODEL`·`LLM_API_KEY` 설명을 채운다.
-SDK 없이 `httpx`(이미 설치됨)로 REST API를 직접 불러도 된다.
+1차 모델은 Gemini Flash-Lite다 (`ai.py`의 `DEFAULT_MODEL`, knowledge 레포 `projects/eureka-desk-pet/ai/README.md`).
+다른 모델로 바꾸면 `pyproject.toml`의 `dependencies`와 `.env.example`의 `LLM_MODEL`·`LLM_API_KEY` 설명을 함께 고친다.
 
 ## 함수 하나를 구현할 때 순서
 
