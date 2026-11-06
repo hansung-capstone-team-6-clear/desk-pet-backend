@@ -17,6 +17,7 @@ from desk_pet_backend.services import ai
 
 log = logging.getLogger(__name__)
 HANDLE_TIMEOUT_SECONDS = 7
+CREATE_FLOW_ACTIONS = {"create_task", "clarify"}
 
 
 async def handle(
@@ -85,7 +86,7 @@ async def _handle(
     step_started = perf_counter()
     open_tasks = await eureka.list_open_tasks()
     timings["eureka_list"] = round((perf_counter() - step_started) * 1000)
-    pending = db.get_pending(user_id)
+    pending, previous_utterances = _split_pending(db.get_pending(user_id))
     step_started = perf_counter()
     analyzed = await ai.analyze(
         audio=audio,
@@ -96,23 +97,32 @@ async def _handle(
     )
     timings["gemini"] = round((perf_counter() - step_started) * 1000)
     decision = Decision.model_validate(analyzed)
+    utterances = _flow_utterances(
+        pending,
+        previous_utterances,
+        decision.action,
+        text if text is not None else decision.transcript,
+    )
+
+    def remember_and_clarify(asked: Decision, question: str) -> VoiceResponse:
+        return _remember_and_clarify(user_id, request_id, asked, utterances, question)
 
     if decision.action == "create_task":
         name = (decision.args.name or "").strip()
         due_at = decision.args.due_at
         offset = decision.args.offset_minutes
+        if name and name_source(name, utterances, open_tasks) is None:
+            # 근거 없는 이름만 지운다. 이 요청의 마감·알림 값은 다시 묻지 않도록 남긴다.
+            without_name = decision.args.model_copy(update={"name": None})
+            return remember_and_clarify(
+                decision.model_copy(update={"args": without_name}), "어떤 일을 추가할까요?"
+            )
         if not name or due_at is None:
-            return _remember_and_clarify(
-                user_id, request_id, decision, "업무 이름과 마감 시간을 알려 주세요."
-            )
+            return remember_and_clarify(decision, "업무 이름과 마감 시간을 알려 주세요.")
         if due_at.tzinfo is None or due_at.utcoffset() is None or due_at <= now:
-            return _remember_and_clarify(
-                user_id, request_id, decision, "미래의 마감 시간을 알려 주세요."
-            )
+            return remember_and_clarify(decision, "미래의 마감 시간을 알려 주세요.")
         if offset is not None and offset <= 0:
-            return _remember_and_clarify(
-                user_id, request_id, decision, "알림 시간을 1분 이상으로 알려 주세요."
-            )
+            return remember_and_clarify(decision, "알림 시간을 1분 이상으로 알려 주세요.")
 
         created = await eureka.create_task(name, due_at)
         try:
@@ -154,9 +164,7 @@ async def _handle(
     if decision.action == "complete_task":
         task = _find_task(open_tasks, decision.args.item_id)
         if task is None:
-            return _remember_and_clarify(
-                user_id, request_id, decision, "어떤 업무를 완료할까요?"
-            )
+            return remember_and_clarify(decision, "어떤 업무를 완료할까요?")
         await eureka.complete_task(task.item_id)
         _clear_pending_after_success(user_id, pending)
         return VoiceResponse(
@@ -173,18 +181,12 @@ async def _handle(
     if decision.action == "update_due":
         task = _find_task(open_tasks, decision.args.item_id)
         if task is None:
-            return _remember_and_clarify(
-                user_id, request_id, decision, "어떤 업무의 마감을 변경할까요?"
-            )
+            return remember_and_clarify(decision, "어떤 업무의 마감을 변경할까요?")
         due_at = decision.args.due_at
         if due_at is None:
-            return _remember_and_clarify(
-                user_id, request_id, decision, f"{task.name} 업무의 마감을 언제로 변경할까요?"
-            )
+            return remember_and_clarify(decision, f"{task.name} 업무의 마감을 언제로 변경할까요?")
         if due_at.tzinfo is None or due_at.utcoffset() is None or due_at <= now:
-            return _remember_and_clarify(
-                user_id, request_id, decision, "미래의 마감 시간을 알려 주세요."
-            )
+            return remember_and_clarify(decision, "미래의 마감 시간을 알려 주세요.")
         await eureka.update_due(task.item_id, due_at)
         _clear_pending_after_success(user_id, pending)
         return VoiceResponse(
@@ -199,11 +201,60 @@ async def _handle(
         )
 
     if decision.action == "clarify":
-        return _remember_and_clarify(
-            user_id, request_id, decision, decision.question or "어떤 업무인지 더 알려 주세요."
-        )
+        return remember_and_clarify(decision, decision.question or "어떤 업무인지 더 알려 주세요.")
 
     return _error(request_id, "이 작업은 아직 지원하지 않아요.")
+
+
+def _compact(value: str) -> str:
+    return "".join(value.split()).casefold()
+
+
+def name_source(name: str, utterances: list[str], open_tasks: list[Task]) -> str | None:
+    """새 업무 이름의 근거를 사용자 발화에서 찾는다. 업무 목록은 근거로 쓰지 않는다.
+
+    "exact": 공백을 뺀 이름이 한 발화에 연속으로 나온다.
+    "words": 목록에 없는 이름의 단어가 한 발화에 모두 나온다 (보조 필터).
+    None: 근거가 없다.
+
+    오판을 줄이는 장치일 뿐 등록 의도를 증명하지는 않는다. 단어를 조합한 이름("보고서랑 발표 준비해" →
+    "발표 보고서 준비")이나, 수정 요청을 등록으로 잘못 판단한 경우는 막지 못한다.
+    """
+    spoken = [_compact(utterance) for utterance in utterances]
+    compact_name = _compact(name)
+    if any(compact_name in utterance for utterance in spoken):
+        return "exact"
+    if any(_compact(task.name) == compact_name for task in open_tasks):
+        return None
+    words = [word.casefold() for word in name.split()]
+    if any(all(word in utterance for word in words) for utterance in spoken):
+        return "words"
+    return None
+
+
+def _split_pending(stored: dict | None) -> tuple[dict | None, list[str]]:
+    """저장된 재질문 맥락을 AI에 넘길 Decision과 이름 검증용 발화로 나눈다."""
+    if stored is None:
+        return None, []
+    pending = dict(stored)
+    utterances = pending.pop("utterances", None)
+    if utterances is None:
+        transcript = pending.get("transcript")
+        utterances = [transcript] if transcript else []
+    return pending, utterances
+
+
+def _flow_utterances(
+    pending: dict | None, previous: list[str], action: str, utterance: str
+) -> list[str]:
+    """이번 등록 흐름의 발화를 최초 요청 1개 + 최근 2개로 유지한다. 완료·변경 재질문의 발화는 잇지 않는다."""
+    continues = (
+        pending is not None
+        and pending.get("action") in CREATE_FLOW_ACTIONS
+        and action in CREATE_FLOW_ACTIONS
+    )
+    history = [*previous, utterance] if continues else [utterance]
+    return history[:1] + history[1:][-2:]
 
 
 def _find_task(tasks: list[Task], item_id: str | None) -> Task | None:
@@ -244,9 +295,9 @@ def _clarify(request_id: str, transcript: str, question: str) -> VoiceResponse:
 
 
 def _remember_and_clarify(
-    user_id: str, request_id: str, decision: Decision, question: str
+    user_id: str, request_id: str, decision: Decision, utterances: list[str], question: str
 ) -> VoiceResponse:
-    db.set_pending(user_id, decision.model_dump(mode="json"))
+    db.set_pending(user_id, {**decision.model_dump(mode="json"), "utterances": utterances})
     return _clarify(request_id, decision.transcript, question)
 
 
