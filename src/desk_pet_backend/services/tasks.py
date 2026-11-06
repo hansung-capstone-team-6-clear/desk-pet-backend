@@ -12,11 +12,39 @@ from time import perf_counter
 from desk_pet_backend import db
 from desk_pet_backend.config import settings
 from desk_pet_backend.eureka import KST, get_eureka
-from desk_pet_backend.schemas import Decision, Lcd, Output, Task, VoiceResponse
+from desk_pet_backend.schemas import (
+    Decision,
+    DeviceTask,
+    DeviceTaskList,
+    Lcd,
+    Output,
+    Task,
+    VoiceResponse,
+)
 from desk_pet_backend.services import ai
 
 log = logging.getLogger(__name__)
 HANDLE_TIMEOUT_SECONDS = 7
+
+
+async def list_device_tasks() -> DeviceTaskList:
+    """Pi 알람에 쓸 미완료 업무를 마감순으로 돌려준다. 알림 간격이 저장되지 않은 업무는 기본값을 쓴다.
+
+    언제 울릴지는 Pi가 판단하므로 마감이 지난 업무도 거르지 않는다 (contracts § 2).
+    """
+    open_tasks = await get_eureka().list_open_tasks()
+    reminders = db.get_reminders()
+    return DeviceTaskList(
+        tasks=[
+            DeviceTask(
+                item_id=task.item_id,
+                name=task.name,
+                due_at=task.due_at,
+                offset_minutes=reminders.get(task.item_id, settings.default_reminder_minutes),
+            )
+            for task in sorted(open_tasks, key=lambda task: task.due_at)
+        ]
+    )
 
 
 async def handle(
