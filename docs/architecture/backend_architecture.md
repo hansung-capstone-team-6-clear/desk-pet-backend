@@ -29,5 +29,5 @@
 
 - 실연동 목록은 원본 100건 이상이면 완료 필터 전에 오류가 난다. 페이지 처리 방식은 확인이 필요하다.
 - `request_id`는 추적용이다. Eureka 등록 뒤 오류가 나면 재요청으로 중복 등록될 수 있다.
-- `update_due`·`set_reminder`와 `NO_SPEECH`·`STT_ERROR`는 스키마에 정의돼 있지만 해당 처리 분기는 없다.
+- `set_reminder`와 `NO_SPEECH`·`STT_ERROR`는 스키마에 정의돼 있지만 해당 처리 분기는 없다.
 - 위 내용은 코드 기준이다. 배포 서버와 실제 Pi·Gemini·Eureka 연동 상태는 별도로 검증한다.
