@@ -26,6 +26,21 @@ NAME_NOISE = re.compile(
     r"|오전|오후|아침|점심|저녁|밤|새벽|정오|자정|반|까지|부터|전|쯤|마감|기한"
     r"|해야할일|할일|업무|일정|작업|태스크|task|todo|등록|추가|하나|새로운|새|것|거|일|\W|_"
 )
+# 삭제는 되돌릴 수 없을 수 있으므로 문장 전체가 정확히 일치할 때만 답으로 본다.
+DELETE_YES = {
+    "응", "응응", "네", "네네", "예", "예예", "그래", "그래요", "맞아", "맞아요", "맞습니다",
+    "응맞아", "네맞아요", "예맞아요", "좋아", "좋아요", "네좋아요", "해줘", "해주세요",
+    "응해줘", "네해주세요", "그래해줘", "삭제", "삭제해", "삭제해줘", "삭제해주세요", "삭제할게",
+    "응삭제", "네삭제", "응삭제해", "응삭제해줘", "네삭제해", "네삭제해줘", "네삭제해주세요",
+    "예삭제해주세요", "그래삭제해", "그래삭제해줘", "지워", "지워줘", "지워주세요", "응지워",
+    "응지워줘", "네지워주세요", "그래지워", "그래지워줘",
+}
+DELETE_NO = {
+    "아니", "아니야", "아니요", "아니오", "아뇨", "아니에요", "취소", "취소해", "취소해줘",
+    "취소해주세요", "취소할게", "취소할게요", "아니취소", "아니취소해", "아니요취소해주세요",
+    "하지마", "하지마세요", "삭제하지마", "삭제하지마세요", "아니삭제하지마", "지우지마",
+    "지우지마세요", "삭제안해", "안해", "안할래", "안할게요", "그만", "그만해", "됐어", "됐어요",
+}
 
 
 async def handle(
@@ -94,7 +109,7 @@ async def _handle(
     step_started = perf_counter()
     open_tasks = await eureka.list_open_tasks()
     timings["eureka_list"] = round((perf_counter() - step_started) * 1000)
-    pending, previous_utterances = _split_pending(db.get_pending(user_id))
+    pending, previous_utterances, delete_item_id = _split_pending(db.get_pending(user_id))
     step_started = perf_counter()
     analyzed = await ai.analyze(
         audio=audio,
@@ -105,15 +120,65 @@ async def _handle(
     )
     timings["gemini"] = round((perf_counter() - step_started) * 1000)
     decision = Decision.model_validate(analyzed)
-    utterances = _flow_utterances(
-        pending,
-        previous_utterances,
-        decision.action,
-        text if text is not None else decision.transcript,
-    )
+    spoken = text if text is not None else decision.transcript
+    utterances = _flow_utterances(pending, previous_utterances, decision.action, spoken)
 
     def remember_and_clarify(asked: Decision, question: str) -> VoiceResponse:
         return _remember_and_clarify(user_id, request_id, asked, utterances, question)
+
+    if delete_item_id is not None:
+        # 삭제 대기 중인 답은 AI 판단과 상관없이 받아쓴 문장으로 판정한다. 그 밖의 말은 삭제를 취소한다.
+        db.clear_pending(user_id)
+        answer = _compact_answer(spoken)
+        if answer in DELETE_YES:
+            task = _find_task(open_tasks, delete_item_id)
+            if task is None:
+                return _error(request_id, "삭제할 업무를 찾지 못했어요.")
+            await eureka.delete_task(task.item_id)
+            log.info("task deleted: request_id=%s item_id=%s name=%s", request_id, task.item_id, task.name)
+            try:
+                db.delete_reminder(task.item_id)
+            except sqlite3.Error:
+                log.exception("task deleted but reminder was not removed: %s", task.item_id)
+            return VoiceResponse(
+                request_id=request_id,
+                status="OK",
+                stt_text=decision.transcript,
+                type="task_deleted",
+                output=Output(
+                    tts=f"{task.name} 업무를 삭제했어요.",
+                    lcd=Lcd(expression="happy", text="업무 삭제 완료"),
+                ),
+            )
+        if answer in DELETE_NO:
+            return VoiceResponse(
+                request_id=request_id,
+                status="OK",
+                stt_text=decision.transcript,
+                type="task_delete_cancelled",
+                output=Output(
+                    tts="삭제하지 않았어요.",
+                    lcd=Lcd(expression="speaking", text="삭제 취소"),
+                ),
+            )
+
+    if decision.action == "delete_task":
+        task = _find_task(open_tasks, decision.args.item_id)
+        if task is None:
+            return remember_and_clarify(decision, "어떤 업무를 삭제할까요?")
+        db.set_pending(
+            user_id,
+            {
+                **decision.model_dump(mode="json"),
+                "utterances": utterances,
+                "delete_item_id": task.item_id,
+            },
+        )
+        return _clarify(
+            request_id,
+            decision.transcript,
+            f"{task.name} 업무를 삭제할까요? 마감은 {_with_copula(_format_due(task.due_at))}.",
+        )
 
     if decision.action == "create_task":
         name = (decision.args.name or "").strip()
@@ -248,16 +313,21 @@ def name_source(name: str, utterances: list[str], open_tasks: list[Task]) -> str
     return None
 
 
-def _split_pending(stored: dict | None) -> tuple[dict | None, list[str]]:
-    """저장된 재질문 맥락을 AI에 넘길 Decision과 이름 검증용 발화로 나눈다."""
+def _compact_answer(spoken: str) -> str:
+    return re.sub(r"[\s.,!?~…]", "", spoken)
+
+
+def _split_pending(stored: dict | None) -> tuple[dict | None, list[str], str | None]:
+    """저장된 재질문 맥락을 AI에 넘길 Decision, 이름 검증용 발화, 삭제 대기 대상으로 나눈다."""
     if stored is None:
-        return None, []
+        return None, [], None
     pending = dict(stored)
     utterances = pending.pop("utterances", None)
+    delete_item_id = pending.pop("delete_item_id", None)
     if utterances is None:
         transcript = pending.get("transcript")
         utterances = [transcript] if transcript else []
-    return pending, utterances
+    return pending, utterances, delete_item_id
 
 
 def _flow_utterances(

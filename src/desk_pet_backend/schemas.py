@@ -25,6 +25,8 @@ ResponseType = Literal[
     "task_created",
     "task_completed",
     "task_updated",
+    "task_deleted",
+    "task_delete_cancelled",
     "task_list",
     "reminder_set",
     "clarification",
@@ -71,6 +73,7 @@ Action = Literal[
     "list_tasks",
     "complete_task",
     "update_due",
+    "delete_task",
     "set_reminder",
     "clarify",
 ]

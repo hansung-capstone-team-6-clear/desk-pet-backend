@@ -132,6 +132,26 @@ async def test_update_due_puts_epoch_ms_and_checks_response():
     }
 
 
+async def test_delete_calls_item_and_checks_response_id():
+    seen = {}
+
+    def respond(request):
+        seen["method"], seen["path"] = request.method, request.url.path
+        return httpx.Response(200, json={"id": "1000013"})
+
+    client = EurekaClient(transport=httpx.MockTransport(respond))
+    await client.delete_task("1000013")
+    assert seen == {"method": "DELETE", "path": "/flw-v1/_api_/items/1000013"}
+
+
+async def test_delete_rejects_mismatched_response():
+    client = EurekaClient(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, json={"id": "999"})
+    ))
+    with pytest.raises(EurekaError, match="삭제 응답"):
+        await client.delete_task("1000013")
+
+
 @pytest.mark.parametrize("body, message", [
     ({"id": 999}, "응답의 id"),
     ({"id": 1000013, "dueAt": 1}, "응답의 dueAt"),

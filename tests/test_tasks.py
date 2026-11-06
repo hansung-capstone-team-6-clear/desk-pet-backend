@@ -525,6 +525,161 @@ async def test_due_phrases_use_correct_particles(mock_flow, monkeypatch, hour, m
     ))
     response = await tasks.handle(user_id="pet-01", request_id="req-64", text="보고서 마감 변경")
     assert response.output.tts.endswith(updated)
+async def ask_to_delete(mock_flow, monkeypatch, user_id="pet-01"):
+    task = await mock_flow.create_task("보고서 작성", datetime.now(KST) + timedelta(days=1))
+    set_decision(monkeypatch, Decision(
+        transcript="보고서 작성 삭제해줘", action="delete_task", args=DecisionArgs(item_id=task.item_id),
+    ))
+    response = await tasks.handle(user_id=user_id, request_id="req-40", text="보고서 작성 삭제해줘")
+    return task, response
+
+
+def answer_decision(text, action="clarify"):
+    return Decision(transcript=text, action=action, args=DecisionArgs(), question="무엇을 할까요?")
+
+
+async def test_first_delete_request_only_asks(mock_flow, monkeypatch):
+    task, response = await ask_to_delete(mock_flow, monkeypatch)
+    assert response.type == "clarification"
+    assert "보고서 작성 업무를 삭제할까요?" in response.output.tts
+    assert "마감은" in response.output.tts
+    assert task.item_id in mock_flow.tasks
+    assert db.get_pending("pet-01")["delete_item_id"] == task.item_id
+
+
+@pytest.mark.parametrize("answer", [
+    "응", "네.", "네 삭제해줘", "그래 삭제해", "맞습니다", "네, 지워 주세요", "응 해줘", "그래 지워!",
+])
+async def test_yes_deletes_task_and_reminder_regardless_of_ai_decision(mock_flow, monkeypatch, answer):
+    task, _ = await ask_to_delete(mock_flow, monkeypatch)
+    db.set_reminder(task.item_id, 60)
+    set_decision(monkeypatch, answer_decision(answer))
+
+    response = await tasks.handle(user_id="pet-01", request_id="req-41", text=answer)
+
+    assert response.status == "OK"
+    assert response.type == "task_deleted"
+    assert response.output.tts == "보고서 작성 업무를 삭제했어요."
+    assert mock_flow.tasks == {}
+    assert db.get_pending("pet-01") is None
+    with db.connect() as conn:
+        assert conn.execute("SELECT 1 FROM reminders WHERE item_id = ?", (task.item_id,)).fetchone() is None
+
+
+def test_delete_answer_lists_do_not_overlap():
+    assert not tasks.DELETE_YES & tasks.DELETE_NO
+
+
+@pytest.mark.parametrize("answer", ["응 근데 잠깐만", "괜찮아", "음", "어", "글쎄"])
+async def test_ambiguous_answer_does_not_delete(mock_flow, monkeypatch, answer):
+    task, _ = await ask_to_delete(mock_flow, monkeypatch)
+    set_decision(monkeypatch, answer_decision(answer))
+    response = await tasks.handle(user_id="pet-01", request_id="req-52", text=answer)
+    assert response.type == "clarification"
+    assert task.item_id in mock_flow.tasks
+    assert "delete_item_id" not in db.get_pending("pet-01")
+
+
+@pytest.mark.parametrize("answer", [
+    "아니", "아니요", "취소해줘", "삭제하지 마", "아니에요", "지우지 마세요", "아니, 취소해", "됐어요",
+])
+async def test_no_cancels_delete(mock_flow, monkeypatch, answer):
+    task, _ = await ask_to_delete(mock_flow, monkeypatch)
+    set_decision(monkeypatch, answer_decision(answer, "delete_task"))
+    response = await tasks.handle(user_id="pet-01", request_id="req-42", text=answer)
+    assert response.type == "task_delete_cancelled"
+    assert task.item_id in mock_flow.tasks
+    assert db.get_pending("pet-01") is None
+
+
+async def test_ai_saying_delete_again_does_not_execute(mock_flow, monkeypatch):
+    task, _ = await ask_to_delete(mock_flow, monkeypatch)
+    response = await tasks.handle(user_id="pet-01", request_id="req-43", text="보고서 작성 삭제해줘")
+    assert response.type == "clarification"
+    assert task.item_id in mock_flow.tasks
+
+
+async def test_echoed_transcript_on_voice_does_not_delete(mock_flow, monkeypatch):
+    task, _ = await ask_to_delete(mock_flow, monkeypatch)
+    set_decision(monkeypatch, Decision(
+        transcript="보고서 작성 삭제해줘", action="delete_task", args=DecisionArgs(item_id=task.item_id),
+    ))
+    response = await tasks.handle(user_id="pet-01", request_id="req-44", audio=b"wav")
+    assert response.type == "clarification"
+    assert task.item_id in mock_flow.tasks
+
+
+async def test_other_request_cancels_pending_delete(mock_flow, monkeypatch):
+    task, _ = await ask_to_delete(mock_flow, monkeypatch)
+    set_decision(monkeypatch, Decision(
+        transcript="오늘 할 일", action="list_tasks", args=DecisionArgs(range="today"),
+    ))
+    response = await tasks.handle(user_id="pet-01", request_id="req-45", text="오늘 할 일")
+    assert response.type == "task_list"
+    assert db.get_pending("pet-01") is None
+
+    set_decision(monkeypatch, answer_decision("응"))
+    response = await tasks.handle(user_id="pet-01", request_id="req-46", text="응")
+    assert response.type == "clarification"
+    assert task.item_id in mock_flow.tasks
+
+
+async def test_unsupported_action_also_cancels_pending_delete(mock_flow, monkeypatch):
+    task, _ = await ask_to_delete(mock_flow, monkeypatch)
+    set_decision(monkeypatch, Decision(
+        transcript="알림 바꿔줘", action="set_reminder", args=DecisionArgs(),
+    ))
+    await tasks.handle(user_id="pet-01", request_id="req-47", text="알림 바꿔줘")
+    assert db.get_pending("pet-01") is None
+    assert task.item_id in mock_flow.tasks
+
+
+async def test_delete_unknown_task_clarifies_without_delete(mock_flow, monkeypatch):
+    set_decision(monkeypatch, Decision(
+        transcript="그거 삭제해줘", action="delete_task", args=DecisionArgs(item_id="unknown"),
+    ))
+    response = await tasks.handle(user_id="pet-01", request_id="req-48", text="그거 삭제해줘")
+    assert response.type == "clarification"
+    assert response.output.tts == "어떤 업무를 삭제할까요?"
+    assert "delete_item_id" not in db.get_pending("pet-01")
+
+
+async def test_confirm_when_task_is_gone_reports_error(mock_flow, monkeypatch):
+    task, _ = await ask_to_delete(mock_flow, monkeypatch)
+    await mock_flow.complete_task(task.item_id)
+    set_decision(monkeypatch, answer_decision("응"))
+    response = await tasks.handle(user_id="pet-01", request_id="req-49", text="응")
+    assert response.status == "ERROR"
+    assert response.output.tts == "삭제할 업무를 찾지 못했어요."
+    assert task.item_id in mock_flow.tasks
+
+
+async def test_eureka_failure_does_not_claim_delete_and_clears_pending(mock_flow, monkeypatch):
+    await ask_to_delete(mock_flow, monkeypatch)
+    set_decision(monkeypatch, answer_decision("응"))
+
+    async def fail_delete(item_id):
+        raise EurekaError("test failure")
+
+    monkeypatch.setattr(mock_flow, "delete_task", fail_delete)
+    response = await tasks.handle(user_id="pet-01", request_id="req-50", text="응")
+    assert response.status == "ERROR"
+    assert "삭제했어요" not in response.output.tts
+    assert db.get_pending("pet-01") is None
+
+
+async def test_delete_marker_is_not_passed_to_ai(mock_flow, monkeypatch):
+    await ask_to_delete(mock_flow, monkeypatch)
+    received = []
+
+    async def analyze(**kwargs):
+        received.append(kwargs["pending"])
+        return answer_decision("네")
+
+    monkeypatch.setattr(tasks.ai, "analyze", analyze)
+    await tasks.handle(user_id="pet-01", request_id="req-51", text="네")
+    assert "delete_item_id" not in received[0]
+    assert "utterances" not in received[0]
 
 
 async def test_old_pending_without_utterances_falls_back_to_transcript(mock_flow, monkeypatch):
