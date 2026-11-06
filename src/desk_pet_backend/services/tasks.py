@@ -170,6 +170,34 @@ async def _handle(
             ),
         )
 
+    if decision.action == "update_due":
+        task = _find_task(open_tasks, decision.args.item_id)
+        if task is None:
+            return _remember_and_clarify(
+                user_id, request_id, decision, "어떤 업무의 마감을 변경할까요?"
+            )
+        due_at = decision.args.due_at
+        if due_at is None:
+            return _remember_and_clarify(
+                user_id, request_id, decision, f"{task.name} 업무의 마감을 언제로 변경할까요?"
+            )
+        if due_at.tzinfo is None or due_at.utcoffset() is None or due_at <= now:
+            return _remember_and_clarify(
+                user_id, request_id, decision, "미래의 마감 시간을 알려 주세요."
+            )
+        await eureka.update_due(task.item_id, due_at)
+        _clear_pending_after_success(user_id, pending)
+        return VoiceResponse(
+            request_id=request_id,
+            status="OK",
+            stt_text=decision.transcript,
+            type="task_updated",
+            output=Output(
+                tts=f"{task.name} 업무의 마감을 {_format_due(due_at)}로 변경했어요.",
+                lcd=Lcd(expression="happy", text="마감 변경 완료"),
+            ),
+        )
+
     if decision.action == "clarify":
         return _remember_and_clarify(
             user_id, request_id, decision, decision.question or "어떤 업무인지 더 알려 주세요."

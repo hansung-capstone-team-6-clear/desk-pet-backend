@@ -25,7 +25,7 @@
 }
 ```
 
-`stt_text`와 `output.lcd`는 null일 수 있다. 구현된 응답은 `OK`와 `ERROR`, 결과 유형은 `task_created`·`task_list`·`task_completed`·`clarification`·`error`다. `NO_SPEECH`·`STT_ERROR`, `task_updated`·`reminder_set`은 스키마 정의 단계다. LED 매핑은 Pi가 담당한다.
+`stt_text`와 `output.lcd`는 null일 수 있다. 구현된 응답은 `OK`와 `ERROR`, 결과 유형은 `task_created`·`task_list`·`task_completed`·`task_updated`·`clarification`·`error`다. `NO_SPEECH`·`STT_ERROR`, `reminder_set`은 스키마 정의 단계다. LED 매핑은 Pi가 담당한다.
 
 ## Backend 내부
 
@@ -35,7 +35,7 @@
 | `ai.py → tasks.py` | `Decision`의 `transcript`, `action`, `args`, 선택 `question` |
 | `tasks.py → db.py` | 재질문은 `user_id`별 `Decision` JSON을 60초 보관한다. 등록 시 `item_id`와 알림 오프셋을 저장한다. |
 
-`args`의 선택 필드는 `name`, `due_at`, `offset_minutes`, `item_id`, `range`, `candidates`다. `range`는 `today`·`tomorrow`·`week`·`all`이다. 실행하는 action은 `create_task`·`list_tasks`·`complete_task`·`clarify`다. `update_due`와 `set_reminder`는 후보에 있으나 요청 처리에서 미지원이다.
+`args`의 선택 필드는 `name`, `due_at`, `offset_minutes`, `item_id`, `range`, `candidates`다. `range`는 `today`·`tomorrow`·`week`·`all`이다. 실행하는 action은 `create_task`·`list_tasks`·`complete_task`·`update_due`·`clarify`다. `set_reminder`는 후보에 있으나 요청 처리에서 미지원이다.
 
 ## Backend → Eureka
 
@@ -46,8 +46,9 @@
 | 조회 | `GET /_api_/items/0/list?sites&detail=true&limit=100`. 원본 100건 이상이면 오류. `done` 제외 |
 | 등록 | `POST /_api_/items/0/start`. `processId`·`name`·`dueAt`·`priority=high` |
 | 완료 | `POST /_api_/items/{item_id}/complete` |
+| 마감 변경 | `PUT /_api_/items/{item_id}`. `dueAt`. 실제 API 응답 검증 전 |
 
-실연동 클라이언트의 단건 상태 조회와 마감 변경은 미구현이다.
+실연동 클라이언트의 단건 상태 조회는 미구현이다.
 
 ## Backend ↔ Pi WebSocket
 

@@ -112,3 +112,33 @@ async def test_complete_rejects_mismatched_response():
     ))
     with pytest.raises(EurekaError, match="완료 응답"):
         await client.complete_task("1000013")
+
+
+async def test_update_due_puts_epoch_ms_and_checks_response():
+    due = datetime(2026, 10, 29, 15, tzinfo=KST)
+    due_ms = to_epoch_ms(due)
+    seen = {}
+
+    def respond(request):
+        seen["method"], seen["path"], seen["body"] = request.method, request.url.path, request.content
+        return httpx.Response(200, json={"id": 1000013, "dueAt": due_ms})
+
+    client = EurekaClient(transport=httpx.MockTransport(respond))
+    await client.update_due("1000013", due)
+    assert seen == {
+        "method": "PUT",
+        "path": "/flw-v1/_api_/items/1000013",
+        "body": f'{{"dueAt":{due_ms}}}'.encode(),
+    }
+
+
+@pytest.mark.parametrize("body, message", [
+    ({"id": 999}, "응답의 id"),
+    ({"id": 1000013, "dueAt": 1}, "응답의 dueAt"),
+])
+async def test_update_due_rejects_mismatched_response(body, message):
+    client = EurekaClient(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, json=body)
+    ))
+    with pytest.raises(EurekaError, match=message):
+        await client.update_due("1000013", datetime(2026, 10, 29, tzinfo=KST))

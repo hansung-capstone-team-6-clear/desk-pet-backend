@@ -228,3 +228,64 @@ async def test_eureka_failure_does_not_claim_complete_success(mock_flow, monkeyp
     assert response.status == "ERROR"
     assert "완료했어요" not in response.output.tts
     assert mock_flow.tasks[created.item_id].status == "todo"
+
+
+async def test_update_due_changes_task_and_returns_success(mock_flow, monkeypatch):
+    created = await mock_flow.create_task("보고서", datetime.now(KST) + timedelta(days=1))
+    new_due = datetime.combine(datetime.now(KST).date() + timedelta(days=3), time(15), KST)
+    set_decision(monkeypatch, Decision(
+        transcript="보고서 마감 미뤄줘", action="update_due",
+        args=DecisionArgs(item_id=created.item_id, due_at=new_due),
+    ))
+
+    response = await tasks.handle(user_id="pet-01", request_id="req-12", text="보고서 마감 미뤄줘")
+
+    assert response.status == "OK"
+    assert response.type == "task_updated"
+    assert "보고서 업무의 마감을" in response.output.tts
+    assert "오후 3시로 변경했어요" in response.output.tts
+    assert response.output.lcd.expression == "happy"
+    assert mock_flow.tasks[created.item_id].due_at == new_due
+
+
+@pytest.mark.parametrize("known_item, due_delta, question", [
+    (False, timedelta(days=1), "어떤 업무의 마감을 변경할까요?"),
+    (True, None, "보고서 업무의 마감을 언제로 변경할까요?"),
+    (True, timedelta(days=-1), "미래의 마감 시간을 알려 주세요."),
+])
+async def test_update_due_clarifies_without_calling_eureka(
+    mock_flow, monkeypatch, known_item, due_delta, question
+):
+    created = await mock_flow.create_task("보고서", datetime.now(KST) + timedelta(days=1))
+    due_at = None if due_delta is None else datetime.now(KST) + due_delta
+    set_decision(monkeypatch, Decision(
+        transcript="마감 바꿔줘", action="update_due",
+        args=DecisionArgs(item_id=created.item_id if known_item else "unknown", due_at=due_at),
+    ))
+
+    async def fail_update(item_id, due_at):
+        raise AssertionError("Eureka must not be called")
+
+    monkeypatch.setattr(mock_flow, "update_due", fail_update)
+    response = await tasks.handle(user_id="pet-01", request_id="req-13", text="마감 바꿔줘")
+    assert response.type == "clarification"
+    assert response.output.tts == question
+    assert db.get_pending("pet-01")["action"] == "update_due"
+
+
+async def test_eureka_failure_does_not_claim_update_success(mock_flow, monkeypatch):
+    original_due = datetime.now(KST) + timedelta(days=1)
+    created = await mock_flow.create_task("보고서", original_due)
+    set_decision(monkeypatch, Decision(
+        transcript="보고서 마감 미뤄줘", action="update_due",
+        args=DecisionArgs(item_id=created.item_id, due_at=original_due + timedelta(days=1)),
+    ))
+
+    async def fail_update(item_id, due_at):
+        raise EurekaError("test failure")
+
+    monkeypatch.setattr(mock_flow, "update_due", fail_update)
+    response = await tasks.handle(user_id="pet-01", request_id="req-14", text="보고서 마감 미뤄줘")
+    assert response.status == "ERROR"
+    assert "변경했어요" not in response.output.tts
+    assert mock_flow.tasks[created.item_id].due_at == original_due

@@ -14599,8 +14599,8 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           endpoint: 'tasks.py → ai.py',
           input: ['WAV 또는 text', 'KST 현재 시간, 미완료 업무 최대 30건, 유효한 pending'],
           output: ['transcript: string', 'action: create_task | list_tasks | complete_task | update_due | set_reminder | clarify', 'args: name?, due_at?, offset_minutes?, item_id?, range?, candidates?', 'question?: string'],
-          processing: '구조화 JSON 한 번 생성. 백엔드가 등록·조회·완료·재질문을 처리한다.',
-          error: 'update_due와 set_reminder는 후보에 포함되며 실행 시 미지원 오류를 반환한다.'
+          processing: '구조화 JSON 한 번 생성. 백엔드가 등록·조회·완료·마감 변경·재질문을 처리한다.',
+          error: 'set_reminder는 후보에 포함되며 실행 시 미지원 오류를 반환한다.'
         }],
         'Desk Pet Backend API': [{
           interface: '현재 구현 · 음성·텍스트 요청',

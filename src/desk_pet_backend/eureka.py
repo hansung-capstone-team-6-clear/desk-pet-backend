@@ -150,8 +150,12 @@ class EurekaClient:
 
     async def update_due(self, item_id: str, due_at: datetime) -> None:
         """PUT /_api_/items/{item_id}  {dueAt: to_epoch_ms(due_at)}"""
-        # TODO(backend, 10/18)
-        raise NotImplementedError
+        due_ms = to_epoch_ms(due_at)
+        data = await self._request("PUT", f"/_api_/items/{item_id}", json={"dueAt": due_ms})
+        if str(data.get("id")) != item_id:
+            raise EurekaError("Eureka 마감 변경 응답의 id가 일치하지 않습니다")
+        if "dueAt" in data and data["dueAt"] != due_ms:
+            raise EurekaError("Eureka 마감 변경 응답의 dueAt이 일치하지 않습니다")
 
     async def get_status(self, item_id: str) -> str:
         """GET /_api_/items/{item_id}/status → status (todo | doing | done | hold)"""
