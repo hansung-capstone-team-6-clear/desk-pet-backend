@@ -52,7 +52,7 @@ async def test_create_uses_default_reminder_when_unspecified(mock_flow, monkeypa
         transcript="업무 등록", action="create_task",
         args=DecisionArgs(name="회의", due_at=datetime.now(KST) + timedelta(days=1)),
     ))
-    response = await tasks.handle(user_id="pet-01", request_id="req-2", text="업무 등록")
+    response = await tasks.handle(user_id="pet-01", request_id="req-2", text="회의 업무 등록")
     assert response.type == "task_created"
     created = (await mock_flow.list_open_tasks())[0]
     with db.connect() as conn:
@@ -65,7 +65,7 @@ async def test_past_due_clarifies_without_creating_task(mock_flow, monkeypatch):
         transcript="어제 업무 등록", action="create_task",
         args=DecisionArgs(name="보고서", due_at=datetime.now(KST) - timedelta(days=1)),
     ))
-    response = await tasks.handle(user_id="pet-01", request_id="req-3", text="어제 업무 등록")
+    response = await tasks.handle(user_id="pet-01", request_id="req-3", text="어제 보고서 등록")
     assert response.type == "clarification"
     assert response.status == "OK"
     assert await mock_flow.list_open_tasks() == []
@@ -118,7 +118,7 @@ async def test_eureka_failure_does_not_claim_create_success(mock_flow, monkeypat
         raise EurekaError("test failure")
 
     monkeypatch.setattr(mock_flow, "create_task", fail_create)
-    response = await tasks.handle(user_id="pet-01", request_id="req-5", text="업무 등록")
+    response = await tasks.handle(user_id="pet-01", request_id="req-5", text="보고서 등록")
     assert response.status == "ERROR"
     assert response.type == "error"
     assert "등록했어요" not in response.output.tts
@@ -159,7 +159,10 @@ async def test_clarification_is_passed_to_next_request_and_cleared_after_create(
     assert response.type == "clarification"
     assert response.output.tts == "마감은 언제인가요?"
     assert calls[0]["pending"] is None
-    assert db.get_pending("pet-01") == first.model_dump(mode="json")
+    assert db.get_pending("pet-01") == {
+        **first.model_dump(mode="json"),
+        "utterances": ["보고서 등록해줘"],
+    }
     assert db.get_pending("pet-02") is None
     assert mock_flow.tasks == {}
 
@@ -289,3 +292,142 @@ async def test_eureka_failure_does_not_claim_update_success(mock_flow, monkeypat
     assert response.status == "ERROR"
     assert "변경했어요" not in response.output.tts
     assert mock_flow.tasks[created.item_id].due_at == original_due
+
+
+def create_decision(transcript, name, due_at=None):
+    return Decision(
+        transcript=transcript, action="create_task", args=DecisionArgs(name=name, due_at=due_at),
+    )
+
+
+@pytest.mark.parametrize("text", [
+    "내일 오후 3시까지 할 일 하나 추가해줘",
+    "보고서 확인하고 작성 일정도 알려줘. 새 업무는 내일 추가해 줘.",
+])
+async def test_name_borrowed_from_task_list_is_not_created(mock_flow, monkeypatch, text):
+    await mock_flow.create_task("보고서 작성", datetime.now(KST) + timedelta(days=5))
+    due = datetime.now(KST) + timedelta(days=1)
+    set_decision(monkeypatch, create_decision(text, "보고서 작성", due))
+
+    response = await tasks.handle(user_id="pet-01", request_id="req-20", text=text)
+
+    assert response.type == "clarification"
+    assert response.output.tts == "어떤 일을 추가할까요?"
+    assert len(mock_flow.tasks) == 1
+    pending = db.get_pending("pet-01")
+    assert pending["args"]["name"] is None
+    assert pending["args"]["due_at"] is not None
+
+
+@pytest.mark.parametrize("text", [
+    "보고서 작성 추가해 줘", "보고서 작성을 추가해 줘", "보고서작성 추가해 줘",
+])
+async def test_same_name_as_open_task_passes_when_spoken_continuously(mock_flow, monkeypatch, text):
+    await mock_flow.create_task("보고서 작성", datetime.now(KST) + timedelta(days=5))
+    set_decision(monkeypatch, create_decision(
+        text, "보고서 작성", datetime.now(KST) + timedelta(days=1),
+    ))
+    response = await tasks.handle(user_id="pet-01", request_id="req-21", text=text)
+    assert response.type == "task_created"
+    assert len(mock_flow.tasks) == 2
+
+
+async def test_name_without_any_source_is_not_created(mock_flow, monkeypatch):
+    text = "내일까지 할 일 추가해줘"
+    set_decision(monkeypatch, create_decision(
+        text, "팀 회의", datetime.now(KST) + timedelta(days=1),
+    ))
+    response = await tasks.handle(user_id="pet-01", request_id="req-22", text=text)
+    assert response.type == "clarification"
+    assert mock_flow.tasks == {}
+
+
+async def test_known_limitation_combined_words_pass_name_policy(mock_flow, monkeypatch):
+    """단어를 조합한 이름은 정책상 통과한다. 정상 동작이 아니라 알려진 한계이며 AI 평가에서 다룬다."""
+    text = "보고서랑 발표 준비해"
+    set_decision(monkeypatch, create_decision(
+        text, "발표 보고서 준비", datetime.now(KST) + timedelta(days=1),
+    ))
+    response = await tasks.handle(user_id="pet-01", request_id="req-23", text=text)
+    assert response.type == "task_created"
+
+
+async def test_first_utterance_is_kept_through_repeated_clarification(mock_flow, monkeypatch):
+    due = datetime.now(KST) + timedelta(days=1)
+    turns = [
+        ("보고서 작성 추가해줘", Decision(
+            transcript="보고서 작성 추가해줘", action="clarify",
+            args=DecisionArgs(name="보고서 작성"), question="마감은 언제인가요?",
+        )),
+        ("내일", Decision(
+            transcript="내일", action="clarify",
+            args=DecisionArgs(name="보고서 작성"), question="몇 시까지인가요?",
+        )),
+        ("오후", Decision(
+            transcript="오후", action="clarify",
+            args=DecisionArgs(name="보고서 작성"), question="몇 시인지 알려 주세요.",
+        )),
+        ("세 시쯤", Decision(
+            transcript="세 시쯤", action="clarify",
+            args=DecisionArgs(name="보고서 작성"), question="정확한 시간을 알려 주세요.",
+        )),
+    ]
+    received = []
+    for text, decision in turns:
+        async def analyze(decision=decision, **kwargs):
+            received.append(kwargs["pending"])
+            return decision
+
+        monkeypatch.setattr(tasks.ai, "analyze", analyze)
+        await tasks.handle(user_id="pet-01", request_id="req-24", text=text)
+
+    assert db.get_pending("pet-01")["utterances"] == ["보고서 작성 추가해줘", "오후", "세 시쯤"]
+    assert all(pending is None or "utterances" not in pending for pending in received)
+
+    set_decision(monkeypatch, create_decision("오후 세 시", "보고서 작성", due))
+    response = await tasks.handle(user_id="pet-01", request_id="req-25", text="오후 세 시")
+    assert response.type == "task_created"
+    assert db.get_pending("pet-01") is None
+
+
+async def test_correct_name_after_failed_validation_creates_task(mock_flow, monkeypatch):
+    await mock_flow.create_task("보고서 작성", datetime.now(KST) + timedelta(days=5))
+    due = datetime.now(KST) + timedelta(days=1)
+    first = "내일 오후 3시까지 할 일 하나 추가해줘"
+    set_decision(monkeypatch, create_decision(first, "보고서 작성", due))
+    response = await tasks.handle(user_id="pet-01", request_id="req-26", text=first)
+    assert response.type == "clarification"
+
+    set_decision(monkeypatch, create_decision("과제 제출", "과제 제출", due))
+    response = await tasks.handle(user_id="pet-01", request_id="req-27", text="과제 제출")
+    assert response.type == "task_created"
+    assert "과제 제출" in response.output.tts
+    assert db.get_pending("pet-01") is None
+
+
+async def test_complete_clarification_is_not_a_name_source(mock_flow, monkeypatch):
+    await mock_flow.create_task("보고서 작성", datetime.now(KST) + timedelta(days=5))
+    spoken = "보고서 작성 끝난 것 같아"
+    set_decision(monkeypatch, Decision(
+        transcript=spoken, action="complete_task", args=DecisionArgs(),
+    ))
+    await tasks.handle(user_id="pet-01", request_id="req-28", text=spoken)
+
+    set_decision(monkeypatch, create_decision(
+        "내일까지", "보고서 작성", datetime.now(KST) + timedelta(days=1),
+    ))
+    response = await tasks.handle(user_id="pet-01", request_id="req-29", text="내일까지")
+    assert response.type == "clarification"
+    assert len(mock_flow.tasks) == 1
+
+
+async def test_old_pending_without_utterances_falls_back_to_transcript(mock_flow, monkeypatch):
+    db.set_pending("pet-01", Decision(
+        transcript="보고서 작성 추가해줘", action="clarify",
+        args=DecisionArgs(name="보고서 작성"), question="마감은 언제인가요?",
+    ).model_dump(mode="json"))
+    set_decision(monkeypatch, create_decision(
+        "내일까지", "보고서 작성", datetime.now(KST) + timedelta(days=1),
+    ))
+    response = await tasks.handle(user_id="pet-01", request_id="req-30", text="내일까지")
+    assert response.type == "task_created"
