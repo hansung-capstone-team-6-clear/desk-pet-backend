@@ -71,8 +71,18 @@ async def test_past_due_clarifies_without_creating_task(mock_flow, monkeypatch):
     assert await mock_flow.list_open_tasks() == []
 
 
+def freeze_now(monkeypatch, now):
+    class FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now
+
+    monkeypatch.setattr(tasks, "datetime", FixedDatetime)
+
+
 async def test_list_filters_by_kst_date_and_hides_done(mock_flow, monkeypatch):
     today = datetime.now(KST).date()
+    freeze_now(monkeypatch, datetime.combine(today, time(12), KST))
     today_task = await mock_flow.create_task("오늘 업무", datetime.combine(today, time(15), KST))
     await mock_flow.create_task("내일 업무", datetime.combine(today + timedelta(days=1), time(15), KST))
     done = await mock_flow.create_task("종료된 보고서", datetime.combine(today, time(16), KST))
@@ -419,6 +429,102 @@ async def test_complete_clarification_is_not_a_name_source(mock_flow, monkeypatc
     response = await tasks.handle(user_id="pet-01", request_id="req-29", text="내일까지")
     assert response.type == "clarification"
     assert len(mock_flow.tasks) == 1
+
+
+@pytest.mark.parametrize("name", [
+    "할 일", "할일", "해야 할 일", "업무", "일정", "새 업무", "할 일 하나", "일정 추가",
+    "내일 오후 3시", "내일 오후 3시까지", "오후 세 시", "11월 20일", "다음 주 월요일", "오늘", "마감",
+])
+async def test_generic_or_date_only_name_is_not_created(mock_flow, monkeypatch, name):
+    due = datetime.now(KST) + timedelta(days=1)
+    spoken = f"{name} 추가해줘"
+    set_decision(monkeypatch, create_decision(spoken, name, due))
+
+    response = await tasks.handle(user_id="pet-01", request_id="req-60", text=spoken)
+
+    assert response.type == "clarification"
+    assert response.output.tts == "어떤 일을 추가할까요?"
+    assert mock_flow.tasks == {}
+    pending = db.get_pending("pet-01")
+    assert pending["args"]["name"] is None
+    assert pending["args"]["due_at"] is not None
+
+
+@pytest.mark.parametrize("name", [
+    "회의", "시험", "오늘 회의 준비", "내일 발표", "일정 조율", "업무 보고", "할 일 정리", "일본어 공부",
+    "3월 보고서", "등록금 납부", "하나은행 방문", "이메일", "반 모임", "3시 회의",
+])
+async def test_real_names_containing_noise_words_are_created(mock_flow, monkeypatch, name):
+    spoken = f"{name} 추가해줘"
+    set_decision(monkeypatch, create_decision(spoken, name, datetime.now(KST) + timedelta(days=1)))
+    response = await tasks.handle(user_id="pet-01", request_id="req-61", text=spoken)
+    assert response.type == "task_created"
+
+
+@pytest.mark.parametrize("range_name", ["today", "week", "all"])
+async def test_list_does_not_read_past_due_tasks(mock_flow, monkeypatch, range_name):
+    today = datetime.now(KST).date()
+    freeze_now(monkeypatch, datetime.combine(today, time(12), KST))
+    await mock_flow.create_task("지난 업무", datetime.combine(today, time(9), KST))
+    await mock_flow.create_task("어제 업무", datetime.combine(today - timedelta(days=1), time(9), KST))
+    await mock_flow.create_task("남은 업무", datetime.combine(today, time(15), KST))
+    set_decision(monkeypatch, Decision(
+        transcript="업무 알려줘", action="list_tasks", args=DecisionArgs(range=range_name),
+    ))
+
+    response = await tasks.handle(user_id="pet-01", request_id="req-65", text="업무 알려줘")
+
+    assert "남은 업무" in response.output.tts
+    assert "지난 업무" not in response.output.tts
+    assert "어제 업무" not in response.output.tts
+    assert response.output.lcd.text == "업무 1건"
+    assert len(await mock_flow.list_open_tasks()) == 3
+
+
+async def test_past_due_task_can_still_be_completed(mock_flow, monkeypatch):
+    created = await mock_flow.create_task("지난 업무", datetime.now(KST) - timedelta(days=1))
+    set_decision(monkeypatch, Decision(
+        transcript="지난 업무 끝났어", action="complete_task", args=DecisionArgs(item_id=created.item_id),
+    ))
+    response = await tasks.handle(user_id="pet-01", request_id="req-66", text="지난 업무 끝났어")
+    assert response.type == "task_completed"
+
+
+async def test_list_reads_nearest_due_first_even_when_truncated(mock_flow, monkeypatch):
+    base = datetime.now(KST) + timedelta(days=30)
+    for offset in [6, 2, 5, 1, 4, 3]:
+        await mock_flow.create_task(f"업무{offset}", base + timedelta(days=offset))
+    set_decision(monkeypatch, Decision(
+        transcript="전체 업무", action="list_tasks", args=DecisionArgs(range="all"),
+    ))
+
+    response = await tasks.handle(user_id="pet-01", request_id="req-62", text="전체 업무")
+
+    tts = response.output.tts
+    positions = [tts.index(f"업무{n}") for n in [1, 2, 3, 4, 5]]
+    assert positions == sorted(positions)
+    assert "업무6" not in tts
+    assert "외 1개" in tts
+
+
+@pytest.mark.parametrize("hour, minute, created, updated", [
+    (15, 0, "오후 3시예요.", "오후 3시로 변경했어요."),
+    (23, 59, "오후 11시 59분이에요.", "오후 11시 59분으로 변경했어요."),
+    (11, 30, "오전 11시 30분이에요.", "오전 11시 30분으로 변경했어요."),
+])
+async def test_due_phrases_use_correct_particles(mock_flow, monkeypatch, hour, minute, created, updated):
+    day = datetime.now(KST).date() + timedelta(days=2)
+    due = datetime.combine(day, time(hour, minute), KST)
+    set_decision(monkeypatch, create_decision("보고서 추가", "보고서", due))
+    response = await tasks.handle(user_id="pet-01", request_id="req-63", text="보고서 추가")
+    assert response.output.tts.endswith(created)
+
+    item_id = next(iter(mock_flow.tasks))
+    set_decision(monkeypatch, Decision(
+        transcript="보고서 마감 변경", action="update_due", args=DecisionArgs(item_id=item_id, due_at=due),
+    ))
+    response = await tasks.handle(user_id="pet-01", request_id="req-64", text="보고서 마감 변경")
+    assert response.output.tts.endswith(updated)
 
 
 async def test_old_pending_without_utterances_falls_back_to_transcript(mock_flow, monkeypatch):

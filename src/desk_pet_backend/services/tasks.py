@@ -5,6 +5,7 @@ Eureka는 eureka.py를 통해서만, 저장은 db.py를 통해서만 접근한�
 
 import asyncio
 import logging
+import re
 import sqlite3
 from datetime import datetime, timedelta
 from time import perf_counter
@@ -18,6 +19,13 @@ from desk_pet_backend.services import ai
 log = logging.getLogger(__name__)
 HANDLE_TIMEOUT_SECONDS = 7
 CREATE_FLOW_ACTIONS = {"create_task", "clarify"}
+# 날짜·시간 표현과 일반어. 이것만으로 된 이름은 업무 이름이 아니다 (공백을 뺀 문장에 적용).
+NAME_NOISE = re.compile(
+    r"오늘|내일|모레|글피|어제|그제|이번주|다음주|지난주|이번달|다음달|지난달|올해|내년"
+    r"|[월화수목금토일]요일|\d+(?:월|일|시|분|주)?|(?:열한|열두|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)시"
+    r"|오전|오후|아침|점심|저녁|밤|새벽|정오|자정|반|까지|부터|전|쯤|마감|기한"
+    r"|해야할일|할일|업무|일정|작업|태스크|task|todo|등록|추가|하나|새로운|새|것|거|일|\W|_"
+)
 
 
 async def handle(
@@ -111,7 +119,7 @@ async def _handle(
         name = (decision.args.name or "").strip()
         due_at = decision.args.due_at
         offset = decision.args.offset_minutes
-        if name and name_source(name, utterances, open_tasks) is None:
+        if name and (is_generic_name(name) or name_source(name, utterances, open_tasks) is None):
             # 근거 없는 이름만 지운다. 이 요청의 마감·알림 값은 다시 묻지 않도록 남긴다.
             without_name = decision.args.model_copy(update={"name": None})
             return remember_and_clarify(
@@ -137,13 +145,16 @@ async def _handle(
             stt_text=decision.transcript,
             type="task_created",
             output=Output(
-                tts=f"{created.name} 업무를 등록했어요. 마감은 {_format_due(created.due_at)}예요.",
+                tts=f"{created.name} 업무를 등록했어요. 마감은 {_with_copula(_format_due(created.due_at))}.",
                 lcd=Lcd(expression="happy", text="업무 등록 완료"),
             ),
         )
 
     if decision.action == "list_tasks":
-        selected = _filter_tasks(open_tasks, decision.args.range or "all", now)
+        selected = sorted(
+            _filter_tasks(open_tasks, decision.args.range or "all", now),
+            key=lambda task: task.due_at,
+        )
         if selected:
             shown = selected[:5]
             summary = ", ".join(f"{task.name} {_format_due(task.due_at)}" for task in shown)
@@ -195,7 +206,7 @@ async def _handle(
             stt_text=decision.transcript,
             type="task_updated",
             output=Output(
-                tts=f"{task.name} 업무의 마감을 {_format_due(due_at)}로 변경했어요.",
+                tts=f"{task.name} 업무의 마감을 {_with_direction(_format_due(due_at))} 변경했어요.",
                 lcd=Lcd(expression="happy", text="마감 변경 완료"),
             ),
         )
@@ -208,6 +219,11 @@ async def _handle(
 
 def _compact(value: str) -> str:
     return "".join(value.split()).casefold()
+
+
+def is_generic_name(name: str) -> bool:
+    """날짜·시간 표현과 일반어를 빼면 아무것도 남지 않는 이름인지 본다 ("할 일", "내일 오후 3시")."""
+    return not NAME_NOISE.sub("", _compact(name))
 
 
 def name_source(name: str, utterances: list[str], open_tasks: list[Task]) -> str | None:
@@ -263,6 +279,8 @@ def _find_task(tasks: list[Task], item_id: str | None) -> Task | None:
 
 
 def _filter_tasks(tasks: list[Task], range_name: str, now: datetime) -> list[Task]:
+    """요청 범위의 업무를 고른다. 마감이 지난 업무는 어느 범위에서도 읽지 않는다."""
+    tasks = [task for task in tasks if task.due_at >= now]
     if range_name == "all":
         return tasks
     today = now.astimezone(KST).date()
@@ -282,6 +300,20 @@ def _format_due(due_at: datetime) -> str:
     hour = local.hour % 12 or 12
     minute = f" {local.minute}분" if local.minute else ""
     return f"{local.month}월 {local.day}일 {period} {hour}시{minute}"
+
+
+def _final_consonant(text: str) -> int:
+    """마지막 글자의 받침 번호를 돌려준다. 받침이 없거나 한글이 아니면 0, ㄹ은 8."""
+    last = text[-1]
+    return (ord(last) - 0xAC00) % 28 if "가" <= last <= "힣" else 0
+
+
+def _with_copula(text: str) -> str:
+    return f"{text}이에요" if _final_consonant(text) else f"{text}예요"
+
+
+def _with_direction(text: str) -> str:
+    return f"{text}로" if _final_consonant(text) in (0, 8) else f"{text}으로"
 
 
 def _clarify(request_id: str, transcript: str, question: str) -> VoiceResponse:
