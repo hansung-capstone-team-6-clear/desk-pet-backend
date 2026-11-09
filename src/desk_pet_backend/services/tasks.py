@@ -21,7 +21,7 @@ from desk_pet_backend.schemas import (
     Task,
     VoiceResponse,
 )
-from desk_pet_backend.services import ai
+from desk_pet_backend.services import ai, task_cache
 
 log = logging.getLogger(__name__)
 HANDLE_TIMEOUT_SECONDS = 7
@@ -32,7 +32,7 @@ async def list_device_tasks() -> DeviceTaskList:
 
     언제 울릴지는 Pi가 판단하므로 마감이 지난 업무도 거르지 않는다 (contracts § 2).
     """
-    open_tasks = await get_eureka().list_open_tasks()
+    open_tasks = await task_cache.get_open_tasks(get_eureka())
     reminders = db.get_reminders()
     return DeviceTaskList(
         tasks=[
@@ -111,7 +111,7 @@ async def _handle(
     now = datetime.now(KST)
     eureka = get_eureka()
     step_started = perf_counter()
-    open_tasks = await eureka.list_open_tasks()
+    open_tasks = await task_cache.get_open_tasks(eureka)
     timings["eureka_list"] = round((perf_counter() - step_started) * 1000)
     pending = db.get_pending(user_id)
     step_started = perf_counter()
@@ -142,7 +142,8 @@ async def _handle(
                 user_id, request_id, decision, "알림 시간을 1분 이상으로 알려 주세요."
             )
 
-        created = await eureka.create_task(name, due_at)
+        created = await _write(eureka, eureka.create_task(name, due_at))
+        task_cache.on_created(eureka, created)
         try:
             db.set_reminder(created.item_id, offset or settings.default_reminder_minutes)
         except sqlite3.Error:
@@ -185,7 +186,8 @@ async def _handle(
             return _remember_and_clarify(
                 user_id, request_id, decision, "어떤 업무를 완료할까요?"
             )
-        await eureka.complete_task(task.item_id)
+        await _write(eureka, eureka.complete_task(task.item_id))
+        task_cache.on_completed(eureka, task.item_id)
         _clear_pending_after_success(user_id, pending)
         return VoiceResponse(
             request_id=request_id,
@@ -213,7 +215,8 @@ async def _handle(
             return _remember_and_clarify(
                 user_id, request_id, decision, "미래의 마감 시간을 알려 주세요."
             )
-        await eureka.update_due(task.item_id, due_at)
+        await _write(eureka, eureka.update_due(task.item_id, due_at))
+        task_cache.on_due_updated(eureka, task.item_id, due_at)
         _clear_pending_after_success(user_id, pending)
         return VoiceResponse(
             request_id=request_id,
@@ -232,6 +235,15 @@ async def _handle(
         )
 
     return _error(request_id, "이 작업은 아직 지원하지 않아요.")
+
+
+async def _write(eureka, write):
+    """Eureka 쓰기를 실행한다. 실패하거나 시간 초과로 끊기면 목록을 바로 다시 조회한다."""
+    try:
+        return await write
+    except (Exception, asyncio.CancelledError):
+        task_cache.on_write_failed(eureka)
+        raise
 
 
 def _find_task(tasks: list[Task], item_id: str | None) -> Task | None:

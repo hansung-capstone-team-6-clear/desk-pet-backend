@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     poll_interval_seconds: int = 60
     default_reminder_minutes: int = 60
 
+    # 업무 목록 캐시 (services/task_cache.py) — 0이면 캐시를 끄고 매번 Eureka를 읽는다
+    task_cache_seconds: int = 86_400
+    task_refresh_delay_seconds: float = 10
+
     # SQLite (db.py)
     db_path: str = "data/desk_pet.db"
 
