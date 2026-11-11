@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 from google.genai import errors
+from pydantic import ValidationError
 
 from desk_pet_backend.eureka import KST, EurekaMock
 from desk_pet_backend.services import ai, tasks
@@ -72,11 +73,30 @@ async def test_other_api_errors_are_not_retried(gemini, code):
     assert gemini.calls == 1
 
 
-async def test_invalid_json_is_not_retried(gemini):
-    gemini.outcomes = ["not json", VALID_JSON]
-    with pytest.raises(ValueError):
+@pytest.mark.parametrize("bad", [
+    "not json",
+    '{transcript: "x"}',  # 실제로 나온 "key must be a string" 형태
+    '{"transcript": "x", "action": "unknown", "args": {}, "question": null}',
+])
+async def test_invalid_decision_json_is_retried_once_and_can_succeed(gemini, bad):
+    gemini.outcomes = [bad, VALID_JSON]
+    assert (await analyze()).action == "list_tasks"
+    assert gemini.calls == 2
+
+
+async def test_second_invalid_json_is_raised_without_third_call(gemini):
+    gemini.outcomes = ["not json", "not json", VALID_JSON]
+    with pytest.raises(ValidationError):
         await analyze()
-    assert gemini.calls == 1
+    assert gemini.calls == 2
+
+
+async def test_retry_budget_is_shared_between_503_and_invalid_json(gemini):
+    """503으로 재시도한 뒤 깨진 JSON이 오면 더 재시도하지 않는다 (LLM 재시도 1회 결정)."""
+    gemini.outcomes = [api_error(503), "not json", VALID_JSON]
+    with pytest.raises(ValidationError):
+        await analyze()
+    assert gemini.calls == 2
 
 
 async def test_handle_returns_error_after_second_503(gemini, monkeypatch):
