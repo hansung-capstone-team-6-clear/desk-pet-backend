@@ -164,6 +164,26 @@ async def test_handle_create_is_visible_without_another_read_and_failure_rereads
     assert eureka.reads == reads_before + 1
 
 
+async def test_voice_delete_removes_task_from_cache(eureka, monkeypatch):
+    task = await eureka.create_task("보고서 작성", due())
+    await task_cache.get_open_tasks(eureka)
+    answers = iter([
+        Decision(transcript="보고서 작성 삭제해줘", action="delete_task", args=DecisionArgs(item_id=task.item_id)),
+        Decision(transcript="응", action="clarify", args=DecisionArgs(), question="무엇을 할까요?"),
+    ])
+
+    async def analyze(**kwargs):
+        return next(answers)
+
+    monkeypatch.setattr(tasks.ai, "analyze", analyze)
+    await tasks.handle(user_id="pet-01", request_id="req-3", text="보고서 작성 삭제해줘")
+    response = await tasks.handle(user_id="pet-01", request_id="req-4", text="응")
+
+    assert response.type == "task_deleted"
+    assert await task_cache.get_open_tasks(eureka) == []
+    assert eureka.reads == 1
+
+
 async def test_device_tasks_read_from_cache(eureka):
     await eureka.create_task("보고서", due())
     await tasks.list_device_tasks()

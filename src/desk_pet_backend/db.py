@@ -61,6 +61,12 @@ def get_reminders() -> dict[str, int]:
     return {row["item_id"]: row["offset_min"] for row in rows}
 
 
+def delete_reminder(item_id: str) -> None:
+    """삭제된 업무의 알림 시점을 지운다."""
+    with closing(connect()) as conn, conn:
+        conn.execute("DELETE FROM reminders WHERE item_id = ?", (item_id,))
+
+
 def get_pending(user_id: str) -> dict | None:
     """만료되지 않은 재질문 맥락을 돌려주고, 만료된 항목은 지운다."""
     now_ms = int(time.time() * 1000)

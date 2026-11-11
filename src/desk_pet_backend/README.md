@@ -34,21 +34,14 @@ api/voice.py → services/tasks.py handle()
                  └─ 템플릿 문장 → VoiceResponse
 ```
 
-마감 알림 (60초마다):
-
-```text
-services/reminder.py check_once()
-  ├─ eureka.py  list_open_tasks(), get_status()
-  ├─ db.py      alerts 중복 확인·기록
-  └─ api/ws.py  send_alert() → Pi
-```
+마감 알림은 Pi가 스스로 울리고, 서버는 `GET /api/tasks`로 목록만 준다 (2026-11-06 결정, 구현 전). 그때 위 흐름의 `list_open_tasks()`도 캐시 읽기로 바뀐다. 지금 있는 `services/reminder.py`, `api/ws.py`의 알림 전송, `alerts` 테이블은 삭제 예정이다.
 
 ## 왜 이 구조인가
 
 - **MVC를 그대로 쓰지 않는 이유**: 이 서버에는 화면(View)이 없다. 화면은 Pi의 LED·LCD·스피커다.
   그래서 "입구(api) → 규칙(services) → 바깥 연결(eureka.py, db.py)" 3층으로 나눴다.
   응답 JSON의 모양(`schemas.py`)이 View에 가장 가깝다.
-- **기능별 폴더(tasks/, reminders/) 대신 역할별 폴더를 쓴 이유**: 기능이 두 개(음성 요청, 마감 알림)뿐이라
+- **기능별 폴더(tasks/ 등) 대신 역할별 폴더를 쓴 이유**: 기능이 많지 않아
   "HTTP 코드는 api/, 규칙은 services/"가 찾기 쉽다. 기능이 5개 이상으로 늘면 기능별 폴더를 검토한다.
 - **바깥 연결이 파일 2개뿐이라 폴더를 만들지 않았다.** 3개 이상이 되면 폴더로 묶는다.
 

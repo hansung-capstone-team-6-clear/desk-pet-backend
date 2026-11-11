@@ -157,6 +157,12 @@ class EurekaClient:
         if "dueAt" in data and data["dueAt"] != due_ms:
             raise EurekaError("Eureka 마감 변경 응답의 dueAt이 일치하지 않습니다")
 
+    async def delete_task(self, item_id: str) -> None:
+        """DELETE /_api_/items/{item_id} → {"id": "<item_id>"}"""
+        data = await self._request("DELETE", f"/_api_/items/{item_id}")
+        if str(data.get("id")) != item_id:
+            raise EurekaError("Eureka 삭제 응답의 id가 일치하지 않습니다")
+
     async def get_status(self, item_id: str) -> str:
         """GET /_api_/items/{item_id}/status → status (todo | doing | done | hold)"""
         # TODO(backend, 11/14)
@@ -183,6 +189,10 @@ class EurekaMock:
 
     async def update_due(self, item_id: str, due_at: datetime) -> None:
         self._get(item_id).due_at = due_at
+
+    async def delete_task(self, item_id: str) -> None:
+        self._get(item_id)
+        del self.tasks[item_id]
 
     async def get_status(self, item_id: str) -> str:
         return self._get(item_id).status

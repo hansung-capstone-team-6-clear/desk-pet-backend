@@ -69,6 +69,10 @@ def on_completed(eureka: Eureka, item_id: str) -> None:
     _after_write(eureka)
 
 
+def on_deleted(eureka: Eureka, item_id: str) -> None:
+    on_completed(eureka, item_id)
+
+
 def on_due_updated(eureka: Eureka, item_id: str, due_at: datetime) -> None:
     if _tasks is not None and item_id in _tasks:
         _tasks[item_id] = _tasks[item_id].model_copy(update={"due_at": due_at})
