@@ -7,10 +7,11 @@ Pi가 보내는 요청이 처음 도착하는 곳이다. MVC로 치면 Controlle
 | 파일 | 하는 일 | 상태 |
 | --- | --- | --- |
 | `voice.py` | `POST /api/voice`(음성), `POST /api/text`(텍스트) → `services/tasks.py`의 `handle()` 호출 | 동작함. 음성 실파일·실모델 평가는 별도 |
+| `tasks.py` | `GET /api/tasks` → `services/tasks.py`의 `list_device_tasks()`. 목록을 못 받으면 503 | 동작함 |
 | `ws.py` | `WS /ws/hardware/{user_id}` 연결 보관, `connected` 전송, 텍스트 `PING` → `{"event": "PONG"}`, `send_alert()` | 이전 알림 설계. Pi 자체 알람으로 바뀌어 **삭제 예정** (2026-11-06) |
 | `auth.py` | `X-Device-Token` 헤더 확인 | 동작함 |
 
-구현 예정: `GET /api/tasks` (미완료 업무의 이름·마감·알림 간격). 주소와 메시지 모양은 knowledge 레포 `projects/eureka-desk-pet/contracts.md` § 1·2를 따른다.
+주소와 메시지 모양은 knowledge 레포 `projects/eureka-desk-pet/contracts.md` § 1·2를 따른다.
 
 ## 규칙
 
@@ -33,5 +34,8 @@ curl -X POST localhost:8000/api/text -H 'content-type: application/json' -H 'x-d
 # 음성: 16kHz 모노 16비트 PCM WAV, 최대 15초
 curl -X POST localhost:8000/api/voice -H 'x-device-token: change-me' \
   -F 'user_id=pet-01' -F 'audio=@speech.wav;type=audio/wav'
+
+# Pi 알람용 업무 목록
+curl localhost:8000/api/tasks -H 'x-device-token: change-me'
 ```
 

@@ -5568,7 +5568,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <ul>
           <li>업무 등록 시 마감 몇 분 전에 알릴지 SQLite에 저장합니다.</li>
           <li>별도 지정이 없으면 기본값은 마감 60분 전입니다.</li>
-          <li>2026-11-06 결정(구현 전): Pi가 GET /api/tasks로 목록을 받아 스스로 알람을 울리고 보낸 기록을 저장합니다.</li>
+          <li>Pi가 GET /api/tasks로 목록을 받아 스스로 알람을 울리고 보낸 기록을 저장합니다.</li>
           <li>WebSocket과 reminder.py는 이전 설계이며 구현 때 삭제합니다.</li>
         </ul>
       </div>
@@ -5579,9 +5579,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <h3>외부 연동 경계</h3>
         </div>
         <ul>
-          <li>업무 처리는 Eureka 클라이언트를 통해 미완료 업무 조회, 등록, 완료를 수행합니다.</li>
+          <li>업무 처리는 Eureka 클라이언트를 통해 미완료 업무 조회, 등록, 마감 변경, 완료, 삭제를 수행합니다.</li>
           <li>실연동 모드에서는 Eureka Process API가 업무 원본입니다. 모의 모드는 메모리에 업무를 저장합니다.</li>
-          <li>일반 응답은 HTTP로 Pi에 반환합니다. 업무 목록은 서버 시작 시·하루 1회 조회해 캐시하기로 했습니다(구현 전).</li>
+          <li>일반 응답은 HTTP로 Pi에 반환합니다. 업무 목록은 서버 시작 시·하루 1회 조회해 캐시하고, 쓰기 뒤 캐시를 고칩니다.</li>
         </ul>
       </div>
     </div>
@@ -14575,7 +14575,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         'reminder-service': ['Reminder Policy'], scheduler: ['Reminder Policy']
       };
       var reminderPolicy = [
-        '2026-11-06 결정(구현 전): Polling·WebSocket 대신 Pi 자체 알람',
+        '2026-11-06 결정: Polling·WebSocket 대신 Pi 자체 알람',
         'GET /api/tasks로 미완료 업무의 이름·마감·알림 간격 전달',
         '사용자 지정 간격이 있으면 해당 값 사용',
         '없으면 기본 마감 60분 전',
@@ -14587,18 +14587,18 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         'STT': '이전 설계: 독립 STT 단계. 현재 services/ai.py에서 Gemini가 전사와 요청 해석을 한 번에 수행한다.',
         'Lightweight Intent Model': '이전 설계: 별도 경량 Intent 단계. 현재 코드에는 해당 단계가 없다.',
         'Intent / LLM': '현재 구현: tasks.py가 맥락을 모아 ai.py를 호출하고 Decision을 검증·실행한다. MCP 호출과 별도 Orchestrator는 설계안이다.',
-        'Desk Pet Backend API': '현재 구현: /api/voice, /api/text, /health. 아래 기존 /api/tasks CRUD와 TaskPort는 이전 설계 계약이다. 조회용 GET /api/tasks는 구현 예정이다(contracts § 2).',
-        'Eureka Process API': '현재 구현: eureka.py가 real HTTP 또는 in-memory mock을 선택한다. 등록·조회·수정·완료를 업무 요청에서 사용한다. 목록 캐시는 구현 예정이다(contracts § 4).',
+        'Desk Pet Backend API': '현재 구현: /api/voice, /api/text, GET /api/tasks, /health. 아래 기존 /api/tasks CRUD와 TaskPort는 이전 설계 계약이다. 조회용 GET /api/tasks는 구현됐다(contracts § 2).',
+        'Eureka Process API': '현재 구현: eureka.py가 real HTTP 또는 in-memory mock을 선택한다. 등록·조회·수정·완료·삭제를 업무 요청에서 사용한다. 목록은 task_cache.py가 캐시한다(contracts § 4).',
         'Output / WebSocket': '현재 구현: 일반 응답은 HTTP VoiceResponse. WS 연결·PING/PONG 코드는 이전 설계이며 삭제 예정이다.',
-        'Reminder Policy': '현재 구현: 등록 시 offset_minutes만 저장한다. Pi 자체 알람으로 구현할 예정이다.'
+        'Reminder Policy': '현재 구현: 등록 시 offset_minutes를 저장하고 GET /api/tasks로 전달한다. 알람은 Pi가 울린다.'
       };
       var implementationContracts = {
         'Intent / LLM': [{
           interface: '현재 구현 · Gemini Decision',
           endpoint: 'tasks.py → ai.py',
           input: ['WAV 또는 text', 'KST 현재 시간, 미완료 업무 최대 30건, 유효한 pending'],
-          output: ['transcript: string', 'action: create_task | list_tasks | complete_task | update_due | set_reminder | clarify', 'args: name?, due_at?, offset_minutes?, item_id?, range?, candidates?', 'question?: string'],
-          processing: '구조화 JSON 한 번 생성. 백엔드가 등록·조회·완료·마감 변경·재질문을 처리한다.',
+          output: ['transcript: string', 'action: create_task | list_tasks | complete_task | update_due | delete_task | set_reminder | clarify', 'args: name?, due_at?, offset_minutes?, item_id?, range?, candidates?', 'question?: string'],
+          processing: '구조화 JSON 한 번 생성. 백엔드가 등록·조회·완료·마감 변경·삭제·재질문을 처리한다. 삭제는 확인 질문 뒤 실행하며 AI 프롬프트 반영 전이다.',
           error: 'set_reminder는 후보에 포함되며 실행 시 미지원 오류를 반환한다.'
         }],
         'Desk Pet Backend API': [{
@@ -14613,12 +14613,20 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           endpoint: 'GET /health',
           output: '{ "status": "ok" }',
           note: '앱 응답 확인용이다. Eureka 또는 Gemini 연결 상태를 검사하지 않는다.'
+        }, {
+          interface: '현재 구현 · Pi 알람용 업무 목록',
+          endpoint: 'GET /api/tasks',
+          input: 'X-Device-Token 헤더',
+          output: '{ tasks: [{ item_id, name, due_at, offset_minutes }] } · 마감순',
+          processing: '업무 목록 캐시와 SQLite 알림 오프셋을 합친다. 마감이 지난 업무도 거르지 않는다.',
+          error: '토큰 401. 목록을 못 받으면 503.'
         }],
         'Eureka Process API': [{
-          interface: '현재 구현 · 업무 조회·등록·수정·완료',
-          endpoint: 'services/tasks.py → eureka.py',
-          input: ['조회: GET /_api_/items/0/list?sites&detail=true&limit=100', '등록: POST /_api_/items/0/start · processId, name, dueAt(epoch ms), priority=high', '수정: PUT /_api_/items/{item_id} · dueAt(epoch ms)', '완료: POST /_api_/items/{item_id}/complete'],
+          interface: '현재 구현 · 업무 조회·등록·수정·완료·삭제',
+          endpoint: 'services/tasks.py · task_cache.py → eureka.py',
+          input: ['조회: GET /_api_/items/0/list?sites&detail=true&limit=100', '등록: POST /_api_/items/0/start · processId, name, dueAt(epoch ms), priority=high', '수정: PUT /_api_/items/{item_id} · dueAt(epoch ms)', '완료: POST /_api_/items/{item_id}/complete', '삭제: DELETE /_api_/items/{item_id}'],
           output: '내부 Task: item_id, name, due_at, status',
+          processing: '목록은 서버 시작 시·하루 1회 읽어 캐시한다. 쓰기 성공 시 캐시를 고치고 약 10초 뒤, 쓰기 실패 시 즉시 다시 읽는다.',
           error: '원본 목록 100건 이상이면 완료 필터 전에 실패한다. 등록 요청에는 재시도 중복을 막는 멱등 처리가 없다.'
         }],
         'Output / WebSocket': [{
@@ -14638,7 +14646,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           interface: '현재 구현 · SQLite 저장',
           endpoint: 'tasks.py → db.py',
           input: ['pending: user_id, Decision JSON, 만료 시각', 'reminders: item_id, offset_minutes'],
-          processing: '재질문 상태는 60초 보관하고 성공 시 삭제를 시도한다. 등록 시 Eureka 쓰기 뒤 알림 설정을 저장한다.',
+          processing: '재질문 상태는 60초 보관하고 성공 시 삭제를 시도한다. 등록 시 Eureka 쓰기 뒤 알림 설정을 저장하고, 업무 삭제 시 지운다.',
           note: 'alerts는 테이블 정의 단계다. SQLite 저장에 실패해도 먼저 등록된 Eureka 업무는 남는다.'
         }]
       };

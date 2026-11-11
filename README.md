@@ -1,7 +1,7 @@
 # Desk Pet Backend
 
 데스크펫의 서버. Raspberry Pi가 보낸 음성·텍스트를 해석해 Eureka Process 업무를 처리하고,
-Pi의 마감 알람에 쓸 업무 목록을 준다 (구현 전).
+Pi의 마감 알람에 쓸 업무 목록을 준다.
 
 > 설계 정본은 knowledge 레포 `projects/eureka-desk-pet/`다. 구조는 `architecture.md`, 주고받는 형식은 `contracts.md`.
 > 형식을 바꾸려면 `contracts.md` PR부터 올린다.
@@ -10,7 +10,7 @@ Pi의 마감 알람에 쓸 업무 목록을 준다 (구현 전).
 
 | 한다 | 하지 않는다 (Hardware 레포가 함) |
 | --- | --- |
-| `/api/voice`·`/api/text` 요청 처리, LLM 1회 호출, Eureka 호출, SQLite 저장 | 녹음, TTS, 재생, LED·LCD 표시 |
+| `/api/voice`·`/api/text` 요청 처리, LLM 1회 호출, Eureka 호출·업무 목록 캐시, SQLite 저장, `GET /api/tasks` 목록 제공 | 녹음, TTS, 재생, LED·LCD 표시, 마감 알람 울리기 |
 
 ## 폴더 구조
 
@@ -20,8 +20,8 @@ desk-pet-backend/
 │   ├── main.py             앱 진입점, /health
 │   ├── config.py           환경 변수
 │   ├── schemas.py          주고받는 데이터 모양 (contracts.md를 코드로)
-│   ├── api/                ① 입구: /api/voice, /api/text, /ws/hardware/{user_id}
-│   ├── services/           ② 규칙·흐름: tasks(요청 처리), ai(LLM), reminder(이전 설계, 삭제 예정)
+│   ├── api/                ① 입구: /api/voice, /api/text, /api/tasks, /ws/hardware/{user_id}(삭제 예정)
+│   ├── services/           ② 규칙·흐름: tasks(요청 처리), task_cache(업무 목록 캐시), ai(LLM), reminder(이전 설계, 삭제 예정)
 │   ├── eureka.py           ③ 바깥 연결: Eureka API + 개발용 mock
 │   └── db.py               ③ 바깥 연결: SQLite
 ├── tests/                  자동 테스트, AI 평가셋, Eureka PoC 스크립트 — tests/README.md
@@ -62,7 +62,7 @@ docker compose up --build
 확인:
 
 1. http://localhost:8000/health → `{"status": "ok"}`
-2. http://localhost:8000/docs → API 목록 (`/api/text`, `/api/voice`는 토큰 필요)
+2. http://localhost:8000/docs → API 목록 (`/api/*`는 토큰 필요)
 3. `pytest` → 전부 통과
 
 `.env`의 기본값은 `EUREKA_MODE=mock`이라 Eureka 키 없이 개발할 수 있다.
@@ -78,13 +78,12 @@ docker compose up --build
 | 10/18 | `/api/text` 요청 처리 | `services/tasks.py`, `api/voice.py` | backend |
 | 10/31 | `/api/voice` 음성 요청 | `api/voice.py`, `services/tasks.py` | backend |
 
-이미 동작하는 것: `/health`, 토큰 확인, `/api/text`·`/api/voice`, 등록·조회·수정·완료·재질문, `EurekaMock`, SQLite 테이블 생성, 시간 변환.
+이미 동작하는 것: `/health`, 토큰 확인, `/api/text`·`/api/voice`, 등록·조회·수정·완료·재질문, 확인 질문이 있는 삭제(AI 프롬프트 반영 전), `GET /api/tasks`, 업무 목록 캐시, `EurekaMock`, SQLite 테이블 생성, 시간 변환.
 
-2026-11-06 결정 (구현 전, 형식은 `contracts.md` § 1·2·4):
+남은 2026-11-06 결정 (형식은 `contracts.md` § 1):
 
 - 시간 제한: 처리 7초 → Pi 10초 지연 안내·20초 실패에 맞춰 조정. Pi 변경과 함께 배포한다.
-- 업무 목록: 요청마다 조회하는 대신 서버 시작 시·하루 1회 조회해 캐시하고, 쓰기 성공 시 캐시를 고친 뒤 약 10초 뒤 재조회한다.
-- 마감 알림: `GET /api/tasks`를 추가하고 Pi가 스스로 울린다. `reminder.py`, `api/ws.py`의 알림 전송, `alerts` 테이블은 삭제한다.
+- 이전 알림 코드 삭제: `reminder.py`, `api/ws.py`의 알림 전송, `alerts` 테이블, `POLL_INTERVAL_SECONDS`.
 
 ## 작업 규칙
 
