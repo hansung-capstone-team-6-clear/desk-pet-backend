@@ -56,7 +56,20 @@ class VoiceResponse(BaseModel):
     output: Output
 
 
-# contracts § 2 — Backend → Pi 선제 알림 (WebSocket)
+# contracts § 2 — Pi → Backend 업무 목록 (Pi 자체 마감 알람)
+
+class DeviceTask(BaseModel):
+    item_id: str
+    name: str
+    due_at: datetime
+    offset_minutes: int
+
+
+class DeviceTaskList(BaseModel):
+    tasks: list[DeviceTask]
+
+
+# 이전 설계 — Backend → Pi 선제 알림 (WebSocket), 삭제 예정
 
 class ProactiveAlert(BaseModel):
     event: Literal["proactive_alert"] = "proactive_alert"

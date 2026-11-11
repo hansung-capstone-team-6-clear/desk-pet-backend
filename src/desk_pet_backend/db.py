@@ -54,6 +54,13 @@ def set_reminder(item_id: str, offset_minutes: int) -> None:
         )
 
 
+def get_reminders() -> dict[str, int]:
+    """저장된 알림 시점을 {item_id: offset_min}으로 돌려준다."""
+    with closing(connect()) as conn:
+        rows = conn.execute("SELECT item_id, offset_min FROM reminders").fetchall()
+    return {row["item_id"]: row["offset_min"] for row in rows}
+
+
 def delete_reminder(item_id: str) -> None:
     """삭제된 업무의 알림 시점을 지운다."""
     with closing(connect()) as conn, conn:
