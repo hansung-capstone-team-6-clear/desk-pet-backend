@@ -52,9 +52,14 @@ async def main() -> None:
         latencies.append(time.perf_counter() - start)
         args = decision.args.model_dump(mode="json", exclude_none=True)
         exp = case["expected"]
-        ok = decision.action == exp["action"] and _matches(exp.get("args", {}), args)
+        ok = (
+            decision.action == exp["action"]
+            and _matches(exp.get("args", {}), args)
+            and ("transcript" not in exp or decision.transcript == exp["transcript"])
+        )
         passed += ok
         print(f"[{'PASS' if ok else 'FAIL'}] {case['id']}: {decision.action} {args}"
+              + (f" / T: {decision.transcript}" if "transcript" in exp else "")
               + (f" / Q: {decision.question}" if decision.question else ""))
         if not ok:
             print(f"        expected: {exp}")
