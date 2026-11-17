@@ -25,7 +25,10 @@ from desk_pet_backend.schemas import (
 from desk_pet_backend.services import ai, task_cache
 
 log = logging.getLogger(__name__)
-HANDLE_TIMEOUT_SECONDS = 7
+# 11/06 결정: 업로드 뒤 읽기·Gemini(재시도 포함)는 15초, Eureka 쓰기는 시작부터 3초.
+# Pi는 10초에 지연 안내, 20초에 실패 처리한다 (contracts § 1).
+HANDLE_TIMEOUT_SECONDS = 15
+WRITE_TIMEOUT_SECONDS = 3
 CREATE_FLOW_ACTIONS = {"create_task", "clarify"}
 # 날짜·시간 표현과 일반어. 이것만으로 된 이름은 업무 이름이 아니다 (공백을 뺀 문장에 적용).
 NAME_NOISE = re.compile(
@@ -78,10 +81,10 @@ async def handle(
     audio: bytes | None = None,
     text: str | None = None,
 ) -> VoiceResponse:
-    """요청 하나를 처리해 Pi에 돌려줄 응답을 만든다. 7초 안에 끝나야 한다 (넘으면 status ERROR).
+    """요청 하나를 처리해 Pi에 돌려줄 응답을 만든다. 넘으면 status ERROR.
 
-    Pi는 업로드 시작부터 10초를 기다리는데, 이 타이머는 업로드가 끝난 뒤 시작한다.
-    업로드·왕복에 쓸 시간을 남겨 Pi가 끊기 전에 ERROR 응답을 받게 한다.
+    제한 시간: Eureka 쓰기 전까지 HANDLE_TIMEOUT_SECONDS(15초), 쓰기는 시작부터 WRITE_TIMEOUT_SECONDS(3초).
+    타이머는 업로드가 끝난 뒤 시작한다. Pi는 20초에 실패 처리하므로 업로드·왕복에 쓸 시간을 남긴다.
 
     1. Eureka 미완료 업무 목록 + db의 pending(user_id별 재질문 대기) 조회
     2. ai.analyze() 1회 호출 → Decision (transcript는 응답의 stt_text가 된다)
@@ -99,8 +102,9 @@ async def handle(
     started = perf_counter()
     status = "ERROR"
     try:
-        async with asyncio.timeout(HANDLE_TIMEOUT_SECONDS):
+        async with asyncio.timeout(HANDLE_TIMEOUT_SECONDS) as timer:
             response = await _handle(
+                timer=timer,
                 user_id=user_id,
                 request_id=request_id,
                 audio=audio,
@@ -126,6 +130,7 @@ async def handle(
 
 async def _handle(
     *,
+    timer: asyncio.Timeout,
     user_id: str,
     request_id: str,
     audio: bytes | None,
@@ -162,7 +167,7 @@ async def _handle(
             task = _find_task(open_tasks, delete_item_id)
             if task is None:
                 return _error(request_id, "삭제할 업무를 찾지 못했어요.")
-            await _write(eureka, eureka.delete_task(task.item_id))
+            await _write(timer, eureka, eureka.delete_task(task.item_id))
             task_cache.on_deleted(eureka, task.item_id)
             log.info("task deleted: request_id=%s item_id=%s name=%s", request_id, task.item_id, task.name)
             try:
@@ -226,7 +231,7 @@ async def _handle(
         if offset is not None and offset <= 0:
             return remember_and_clarify(decision, "알림 시간을 1분 이상으로 알려 주세요.")
 
-        created = await _write(eureka, eureka.create_task(name, due_at))
+        created = await _write(timer, eureka, eureka.create_task(name, due_at))
         task_cache.on_created(eureka, created)
         try:
             db.set_reminder(created.item_id, offset or settings.default_reminder_minutes)
@@ -271,7 +276,7 @@ async def _handle(
         task = _find_task(open_tasks, decision.args.item_id)
         if task is None:
             return remember_and_clarify(decision, "어떤 업무를 완료할까요?")
-        await _write(eureka, eureka.complete_task(task.item_id))
+        await _write(timer, eureka, eureka.complete_task(task.item_id))
         task_cache.on_completed(eureka, task.item_id)
         _clear_pending_after_success(user_id, pending)
         return VoiceResponse(
@@ -294,7 +299,7 @@ async def _handle(
             return remember_and_clarify(decision, f"{task.name} 업무의 마감을 언제로 변경할까요?")
         if due_at.tzinfo is None or due_at.utcoffset() is None or due_at <= now:
             return remember_and_clarify(decision, "미래의 마감 시간을 알려 주세요.")
-        await _write(eureka, eureka.update_due(task.item_id, due_at))
+        await _write(timer, eureka, eureka.update_due(task.item_id, due_at))
         task_cache.on_due_updated(eureka, task.item_id, due_at)
         _clear_pending_after_success(user_id, pending)
         return VoiceResponse(
@@ -314,8 +319,12 @@ async def _handle(
     return _error(request_id, "이 작업은 아직 지원하지 않아요.")
 
 
-async def _write(eureka, write):
-    """Eureka 쓰기를 실행한다. 실패하거나 시간 초과로 끊기면 목록을 바로 다시 조회한다."""
+async def _write(timer: asyncio.Timeout, eureka, write):
+    """Eureka 쓰기를 실행한다. 실패하거나 시간 초과로 끊기면 목록을 바로 다시 조회한다.
+
+    쓰기를 시작하면 남은 시간과 상관없이 마감을 지금부터 WRITE_TIMEOUT_SECONDS로 다시 잡는다.
+    """
+    timer.reschedule(asyncio.get_running_loop().time() + WRITE_TIMEOUT_SECONDS)
     try:
         return await write
     except (Exception, asyncio.CancelledError):
