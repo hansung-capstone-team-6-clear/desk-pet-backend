@@ -5,7 +5,6 @@ Eureka는 eureka.py를 통해서만, 저장은 db.py를 통해서만 접근한�
 
 import asyncio
 import logging
-import re
 import sqlite3
 from datetime import datetime, timedelta
 from time import perf_counter
@@ -48,21 +47,6 @@ UNKNOWN_TASK_QUESTIONS = {
     "complete_task": "어떤 업무를 완료할까요?",
     "update_due": "어떤 업무의 마감을 변경할까요?",
     "delete_task": "어떤 업무를 삭제할까요?",
-}
-# 삭제는 되돌릴 수 없을 수 있으므로 문장 전체가 정확히 일치할 때만 답으로 본다.
-DELETE_YES = {
-    "응", "응응", "네", "네네", "예", "예예", "그래", "그래요", "맞아", "맞아요", "맞습니다",
-    "응맞아", "네맞아요", "예맞아요", "좋아", "좋아요", "네좋아요", "해줘", "해주세요",
-    "응해줘", "네해주세요", "그래해줘", "삭제", "삭제해", "삭제해줘", "삭제해주세요", "삭제할게",
-    "응삭제", "네삭제", "응삭제해", "응삭제해줘", "네삭제해", "네삭제해줘", "네삭제해주세요",
-    "예삭제해주세요", "그래삭제해", "그래삭제해줘", "지워", "지워줘", "지워주세요", "응지워",
-    "응지워줘", "네지워주세요", "그래지워", "그래지워줘",
-}
-DELETE_NO = {
-    "아니", "아니야", "아니요", "아니오", "아뇨", "아니에요", "취소", "취소해", "취소해줘",
-    "취소해주세요", "취소할게", "취소할게요", "아니취소", "아니취소해", "아니요취소해주세요",
-    "하지마", "하지마세요", "삭제하지마", "삭제하지마세요", "아니삭제하지마", "지우지마",
-    "지우지마세요", "삭제안해", "안해", "안할래", "안할게요", "그만", "그만해", "됐어", "됐어요",
 }
 
 
@@ -165,16 +149,16 @@ async def _handle(
     )
     timings["gemini"] = round((perf_counter() - step_started) * 1000)
     decision = Decision.model_validate(analyzed)
-    spoken = text if text is not None else decision.transcript
 
     def remember_and_clarify(asked: Decision, question: str) -> VoiceResponse:
         return _remember_and_clarify(user_id, request_id, asked, question)
 
     if delete_item_id is not None:
-        # 삭제 대기 중인 답은 AI 판단과 상관없이 받아쓴 문장으로 판정한다. 그 밖의 말은 삭제를 취소한다.
+        # 삭제 확인 질문에 대한 답. 동의 여부는 AI가 confirm으로 판단하고, Backend는 그 답이
+        # 확인 질문의 대상 업무에 대한 것인지만 검사한다. 다른 업무·다른 요청이면 삭제를 취소하고 새 요청으로 처리한다.
         db.clear_pending(user_id)
-        answer = _compact_answer(spoken)
-        if answer in DELETE_YES:
+        answered = decision.action == "delete_task" and decision.args.item_id == delete_item_id
+        if answered and decision.args.confirm == "yes":
             task = _find_task(open_tasks, delete_item_id)
             if task is None:
                 return _error(request_id, "삭제할 업무를 찾지 못했어요.")
@@ -195,7 +179,7 @@ async def _handle(
                     lcd=Lcd(expression="happy", text="업무 삭제 완료"),
                 ),
             )
-        if answer in DELETE_NO:
+        if answered and decision.args.confirm == "no":
             return VoiceResponse(
                 request_id=request_id,
                 status="OK",
@@ -206,6 +190,7 @@ async def _handle(
                     lcd=Lcd(expression="speaking", text="삭제 취소"),
                 ),
             )
+        # confirm이 null이면 (동의인지 알 수 없음) 아래 delete_task 처리가 같은 업무로 다시 확인한다.
 
     if decision.action in REQUIRED_ARGS or decision.action in TASK_ACTIONS:
         blocked = check_decision(decision, open_tasks, now)
@@ -369,10 +354,6 @@ def _join_with_and(labels: list[str]) -> str:
     for label in labels[1:]:
         text += ("과 " if _final_consonant(text) else "와 ") + label
     return text + ("을" if _final_consonant(text) else "를")
-
-
-def _compact_answer(spoken: str) -> str:
-    return re.sub(r"[\s.,!?~…]", "", spoken)
 
 
 def _split_pending(stored: dict | None) -> tuple[dict | None, str | None]:

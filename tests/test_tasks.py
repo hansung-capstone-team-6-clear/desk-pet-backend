@@ -393,13 +393,17 @@ async def test_first_delete_request_only_asks(mock_flow, monkeypatch):
     assert db.get_pending("pet-01")["delete_item_id"] == task.item_id
 
 
-@pytest.mark.parametrize("answer", [
-    "응", "네.", "네 삭제해줘", "그래 삭제해", "맞습니다", "네, 지워 주세요", "응 해줘", "그래 지워!",
-])
-async def test_yes_deletes_task_and_reminder_regardless_of_ai_decision(mock_flow, monkeypatch, answer):
+def confirm_decision(text, item_id, confirm):
+    return Decision(
+        transcript=text, action="delete_task", args=DecisionArgs(item_id=item_id, confirm=confirm),
+    )
+
+
+@pytest.mark.parametrize("answer", ["응", "응응", "알겠어요", "그래 지워"])
+async def test_ai_yes_deletes_task_and_reminder(mock_flow, monkeypatch, answer):
     task, _ = await ask_to_delete(mock_flow, monkeypatch)
     db.set_reminder(task.item_id, 60)
-    set_decision(monkeypatch, answer_decision(answer))
+    set_decision(monkeypatch, confirm_decision(answer, task.item_id, "yes"))
 
     response = await tasks.handle(user_id="pet-01", request_id="req-41", text=answer)
 
@@ -412,30 +416,43 @@ async def test_yes_deletes_task_and_reminder_regardless_of_ai_decision(mock_flow
         assert conn.execute("SELECT 1 FROM reminders WHERE item_id = ?", (task.item_id,)).fetchone() is None
 
 
-def test_delete_answer_lists_do_not_overlap():
-    assert not tasks.DELETE_YES & tasks.DELETE_NO
-
-
-@pytest.mark.parametrize("answer", ["응 근데 잠깐만", "괜찮아", "음", "어", "글쎄"])
-async def test_ambiguous_answer_does_not_delete(mock_flow, monkeypatch, answer):
+async def test_ai_no_cancels_delete(mock_flow, monkeypatch):
     task, _ = await ask_to_delete(mock_flow, monkeypatch)
-    set_decision(monkeypatch, answer_decision(answer))
-    response = await tasks.handle(user_id="pet-01", request_id="req-52", text=answer)
-    assert response.type == "clarification"
-    assert task.item_id in mock_flow.tasks
-    assert "delete_item_id" not in db.get_pending("pet-01")
-
-
-@pytest.mark.parametrize("answer", [
-    "아니", "아니요", "취소해줘", "삭제하지 마", "아니에요", "지우지 마세요", "아니, 취소해", "됐어요",
-])
-async def test_no_cancels_delete(mock_flow, monkeypatch, answer):
-    task, _ = await ask_to_delete(mock_flow, monkeypatch)
-    set_decision(monkeypatch, answer_decision(answer, "delete_task"))
-    response = await tasks.handle(user_id="pet-01", request_id="req-42", text=answer)
+    set_decision(monkeypatch, confirm_decision("아 그냥 둬", task.item_id, "no"))
+    response = await tasks.handle(user_id="pet-01", request_id="req-42", text="아 그냥 둬")
     assert response.type == "task_delete_cancelled"
     assert task.item_id in mock_flow.tasks
     assert db.get_pending("pet-01") is None
+
+
+async def test_unclear_answer_asks_again_for_same_task(mock_flow, monkeypatch):
+    task, _ = await ask_to_delete(mock_flow, monkeypatch)
+    set_decision(monkeypatch, confirm_decision("음", task.item_id, None))
+    response = await tasks.handle(user_id="pet-01", request_id="req-52", text="음")
+    assert response.type == "clarification"
+    assert "보고서 작성 업무를 삭제할까요?" in response.output.tts
+    assert task.item_id in mock_flow.tasks
+    assert db.get_pending("pet-01")["delete_item_id"] == task.item_id
+
+
+async def test_yes_for_another_task_does_not_delete_either(mock_flow, monkeypatch):
+    """AI가 동의라고 판단해도 확인 질문의 대상이 아닌 업무면 지우지 않고, 그 업무를 다시 확인한다."""
+    task, _ = await ask_to_delete(mock_flow, monkeypatch)
+    other = await mock_flow.create_task("발표 준비", datetime.now(KST) + timedelta(days=2))
+    set_decision(monkeypatch, confirm_decision("응", other.item_id, "yes"))
+    response = await tasks.handle(user_id="pet-01", request_id="req-53", text="응")
+    assert response.type == "clarification"
+    assert "발표 준비 업무를 삭제할까요?" in response.output.tts
+    assert task.item_id in mock_flow.tasks and other.item_id in mock_flow.tasks
+    assert db.get_pending("pet-01")["delete_item_id"] == other.item_id
+
+
+async def test_yes_without_confirmation_question_only_asks(mock_flow, monkeypatch):
+    task = await mock_flow.create_task("보고서 작성", datetime.now(KST) + timedelta(days=1))
+    set_decision(monkeypatch, confirm_decision("보고서 작성 지워", task.item_id, "yes"))
+    response = await tasks.handle(user_id="pet-01", request_id="req-54", text="보고서 작성 지워")
+    assert response.type == "clarification"
+    assert task.item_id in mock_flow.tasks
 
 
 async def test_ai_saying_delete_again_does_not_execute(mock_flow, monkeypatch):
@@ -464,7 +481,7 @@ async def test_other_request_cancels_pending_delete(mock_flow, monkeypatch):
     assert response.type == "task_list"
     assert db.get_pending("pet-01") is None
 
-    set_decision(monkeypatch, answer_decision("응"))
+    set_decision(monkeypatch, confirm_decision("응", task.item_id, "yes"))
     response = await tasks.handle(user_id="pet-01", request_id="req-46", text="응")
     assert response.type == "clarification"
     assert task.item_id in mock_flow.tasks
@@ -493,7 +510,7 @@ async def test_delete_unknown_task_clarifies_without_delete(mock_flow, monkeypat
 async def test_confirm_when_task_is_gone_reports_error(mock_flow, monkeypatch):
     task, _ = await ask_to_delete(mock_flow, monkeypatch)
     await mock_flow.complete_task(task.item_id)
-    set_decision(monkeypatch, answer_decision("응"))
+    set_decision(monkeypatch, confirm_decision("응", task.item_id, "yes"))
     response = await tasks.handle(user_id="pet-01", request_id="req-49", text="응")
     assert response.status == "ERROR"
     assert response.output.tts == "삭제할 업무를 찾지 못했어요."
@@ -501,8 +518,8 @@ async def test_confirm_when_task_is_gone_reports_error(mock_flow, monkeypatch):
 
 
 async def test_eureka_failure_does_not_claim_delete_and_clears_pending(mock_flow, monkeypatch):
-    await ask_to_delete(mock_flow, monkeypatch)
-    set_decision(monkeypatch, answer_decision("응"))
+    task, _ = await ask_to_delete(mock_flow, monkeypatch)
+    set_decision(monkeypatch, confirm_decision("응", task.item_id, "yes"))
 
     async def fail_delete(item_id):
         raise EurekaError("test failure")

@@ -99,6 +99,7 @@ class DecisionArgs(BaseModel):
     item_id: str | None = None
     range: Literal["today", "tomorrow", "week", "all"] | None = None
     candidates: list[str] | None = None
+    confirm: Literal["yes", "no"] | None = None  # 삭제 확인 질문에 대한 답 (AI 판단)
 
 
 class Decision(BaseModel):
