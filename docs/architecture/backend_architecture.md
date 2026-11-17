@@ -43,16 +43,16 @@ Eureka 웹에서 바꾼 내용은 캐시 때문에 최대 하루 늦게 반영�
 | 변경 | 내용 |
 | --- | --- |
 | 시간 제한 | 처리 7초 → Pi 10초 지연 안내·20초 실패에 맞춰 조정. LLM 재시도 1회. Pi 변경과 함께 배포한다 (`contracts.md` § 1). |
-| 코드 삭제 | `reminder.py`, `api/ws.py`의 알림 전송, `alerts` 테이블, `POLL_INTERVAL_SECONDS` |
 
 ## 이전 알림 코드
 
-`api/ws.py`에는 토큰 검사, 연결 관리, `connected`, PING/PONG, `send_alert()`가 있다. `reminder.py`의 알림 판단·재전송은 미구현이고, 앱 시작 시 폴러를 연결하지 않았다. `alerts`는 테이블 정의 단계다. 마감 알람은 Pi가 맡기로 해서 모두 삭제한다.
+마감 알람은 Pi가 `GET /api/tasks`로 직접 울리기로 해서(2026-11-06) Backend 선제 알림 코드는 삭제했다: `services/reminder.py`, `api/ws.py`의 `send_alert()`, `alerts` 테이블, `POLL_INTERVAL_SECONDS`, `EurekaClient.get_status()`. 이미 만들어진 DB 파일의 `alerts` 테이블은 남아 있어도 쓰지 않는다.
+
+`api/ws.py`에는 토큰 검사, `connected`, PING/PONG만 남겼다. Hardware 앱(`app/backend_client.py` `listen()`)이 아직 연결하므로, Pi가 바꾼 뒤 엔드포인트를 삭제한다. `schemas.ProactiveAlert`도 쓰지 않지만 공용 파일이라 따로 정리한다.
 
 ## 구현상 제약
 
 - 실연동 목록은 원본 100건 이상이면 완료 필터 전에 오류가 난다. 페이지 처리 방식은 확인이 필요하다.
 - `request_id`는 추적용이다. Eureka 등록 뒤 오류가 나면 재요청으로 중복 등록될 수 있다.
-- `delete_task`는 백엔드 처리만 있고, AI 프롬프트가 아직 내보내지 않는다.
 - `set_reminder`와 `NO_SPEECH`·`STT_ERROR`는 스키마에 정의돼 있지만 해당 처리 분기는 없다.
 - 위 내용은 코드 기준이다. 배포 서버와 실제 Pi·Gemini·Eureka 연동 상태는 별도로 검증한다.

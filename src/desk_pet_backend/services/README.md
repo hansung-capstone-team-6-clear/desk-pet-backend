@@ -9,7 +9,6 @@
 | `tasks.py` | 요청 하나 처리: 업무 목록 읽기 → `ai.analyze()` → 정책 검증 → Eureka 실행 → 캐시 반영 → 응답 문장. `GET /api/tasks` 목록도 만든다 | backend | 10/18 (`/api/text`), 10/31 (`/api/voice`) |
 | `task_cache.py` | 미완료 업무 목록 캐시. 서버 시작 시·하루 1회 읽고, 쓰기 성공 시 고친 뒤 약 10초 뒤 다시 읽는다 (`contracts.md` § 4) | backend | - |
 | `ai.py` | LLM 1회 호출 → `Decision` | ai | 10/18 |
-| `reminder.py` | 이전 알림 설계의 뼈대. Pi 자체 알람으로 바뀌어 **삭제 예정** (2026-11-06) | backend | - |
 
 ## 규칙
 

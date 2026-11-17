@@ -42,7 +42,7 @@ api/tasks.py → services/tasks.py list_device_tasks()
                  └─ db.py       get_reminders()      업무별 알림 오프셋
 ```
 
-마감 알람은 Pi가 이 목록으로 스스로 울린다. 캐시는 서버 시작 시 `main.py`가 `task_cache.run_forever()`로 띄운다. 지금 있는 `services/reminder.py`, `api/ws.py`의 알림 전송, `alerts` 테이블은 삭제 예정이다.
+마감 알람은 Pi가 이 목록으로 스스로 울린다. 캐시는 서버 시작 시 `main.py`가 `task_cache.run_forever()`로 띄운다. 이전 설계의 선제 알림 코드(`services/reminder.py`, `api/ws.py`의 알림 전송, `alerts` 테이블)는 삭제했다.
 
 ## 왜 이 구조인가
 

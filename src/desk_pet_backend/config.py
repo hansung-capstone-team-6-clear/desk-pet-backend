@@ -21,8 +21,7 @@ class Settings(BaseSettings):
     # Raspberry Pi 인증 (contracts § 0) — 비어 있으면 모든 요청을 거절한다
     device_token: str = ""
 
-    # 선제 알림 (services/reminder.py)
-    poll_interval_seconds: int = 60
+    # 알림 간격 기본값 (분). GET /api/tasks로 Pi에 내려간다
     default_reminder_minutes: int = 60
 
     # 업무 목록 캐시 (services/task_cache.py) — 0이면 캐시를 끄고 매번 Eureka를 읽는다

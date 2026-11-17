@@ -20,8 +20,8 @@ desk-pet-backend/
 │   ├── main.py             앱 진입점, /health
 │   ├── config.py           환경 변수
 │   ├── schemas.py          주고받는 데이터 모양 (contracts.md를 코드로)
-│   ├── api/                ① 입구: /api/voice, /api/text, /api/tasks, /ws/hardware/{user_id}(삭제 예정)
-│   ├── services/           ② 규칙·흐름: tasks(요청 처리), task_cache(업무 목록 캐시), ai(LLM), reminder(이전 설계, 삭제 예정)
+│   ├── api/                ① 입구: /api/voice, /api/text, /api/tasks, /ws/hardware/{user_id}(연결 확인만, Pi 전환 후 삭제)
+│   ├── services/           ② 규칙·흐름: tasks(요청 처리), task_cache(업무 목록 캐시), ai(LLM)
 │   ├── eureka.py           ③ 바깥 연결: Eureka API + 개발용 mock
 │   └── db.py               ③ 바깥 연결: SQLite
 ├── tests/                  자동 테스트, AI 평가셋, Eureka PoC 스크립트 — tests/README.md
@@ -78,12 +78,11 @@ docker compose up --build
 | 10/18 | `/api/text` 요청 처리 | `services/tasks.py`, `api/voice.py` | backend |
 | 10/31 | `/api/voice` 음성 요청 | `api/voice.py`, `services/tasks.py` | backend |
 
-이미 동작하는 것: `/health`, 토큰 확인, `/api/text`·`/api/voice`, 등록·조회·수정·완료·재질문, 확인 질문이 있는 삭제(AI 프롬프트 반영 전), `GET /api/tasks`, 업무 목록 캐시, `EurekaMock`, SQLite 테이블 생성, 시간 변환.
+이미 동작하는 것: `/health`, 토큰 확인, `/api/text`·`/api/voice`, 등록·조회·수정·완료·재질문, 확인 질문이 있는 삭제, `GET /api/tasks`, 업무 목록 캐시, `EurekaMock`, SQLite 테이블 생성, 시간 변환.
 
 남은 2026-11-06 결정 (형식은 `contracts.md` § 1):
 
 - 시간 제한: 처리 7초 → Pi 10초 지연 안내·20초 실패에 맞춰 조정. Pi 변경과 함께 배포한다.
-- 이전 알림 코드 삭제: `reminder.py`, `api/ws.py`의 알림 전송, `alerts` 테이블, `POLL_INTERVAL_SECONDS`.
 
 ## 작업 규칙
 

@@ -1,13 +1,12 @@
 """WS /ws/hardware/{user_id} (contracts § 2).
 
-Pi와의 연결을 기억해 두고, services/reminder.py가 send_alert()로 알림을 보낸다.
-connected·PING/PONG은 이미 동작하므로 Hardware 쪽은 지금 바로 연결 테스트를 할 수 있다.
+이전 선제 알림 설계의 연결이다. 알림 전송은 지웠고 (2026-11-06 결정: 마감 알람은 Pi가 GET /api/tasks로 직접 울린다),
+Hardware 앱이 아직 이 주소에 연결하므로 connected·PING/PONG만 남긴다. Pi가 연결을 끊으면 이 파일도 지운다.
 """
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from desk_pet_backend.api.auth import is_valid_token
-from desk_pet_backend.schemas import ProactiveAlert
 
 router = APIRouter()
 
@@ -23,7 +22,6 @@ async def ws(websocket: WebSocket, user_id: str) -> None:
     await websocket.accept()
     connections[user_id] = websocket
     await websocket.send_json({"event": "connected", "user_id": user_id})
-    # TODO(backend, 11/14): 연결 직후 미전달 알림 재전송 (services.reminder.resend_undelivered)
 
     try:
         while True:
@@ -35,14 +33,3 @@ async def ws(websocket: WebSocket, user_id: str) -> None:
         if connections.get(user_id) is websocket:
             del connections[user_id]
 
-
-async def send_alert(user_id: str, alert: ProactiveAlert) -> bool:
-    """보냈으면 True. 연결이 없거나 보내다 실패하면 False → 호출한 쪽이 undelivered로 기록한다."""
-    websocket = connections.get(user_id)
-    if websocket is None:
-        return False
-    try:
-        await websocket.send_json(alert.model_dump(mode="json"))
-    except (WebSocketDisconnect, RuntimeError, OSError):  # 이미 끊긴 연결
-        return False
-    return True
