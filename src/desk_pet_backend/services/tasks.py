@@ -32,13 +32,14 @@ WRITE_TIMEOUT_SECONDS = 3
 
 # 실행 전제조건 (check_decision). Gemini 오류를 볼 때마다 검사를 늘리지 않는다 — 오류는 프롬프트와 평가셋으로 고친다.
 # action이나 필드를 새로 만들 때만 아래 표를 고친다.
-TASK_ACTIONS = {"complete_task", "update_due", "delete_task"}  # item_id가 미완료 목록에 있어야 하는 action
+TASK_ACTIONS = {"complete_task", "update_due", "delete_task", "set_reminder"}  # item_id가 미완료 목록에 있어야 하는 action
 REQUIRED_ARGS = {
     "create_task": ("name", "due_at"),
     "update_due": ("due_at",),
+    "set_reminder": ("offset_minutes",),
 }
 # 빠진 값은 이 이름표를 이어 붙여 한 번에 묻는다 ("업무 이름과 마감 시간을 알려 주세요.").
-FIELD_LABELS = {"name": "업무 이름", "due_at": "마감 시간"}
+FIELD_LABELS = {"name": "업무 이름", "due_at": "마감 시간", "offset_minutes": "알림 시간"}
 CHECK_QUESTIONS = {
     "past_due": "미래의 마감 시간을 알려 주세요.",
     "bad_offset": "알림 시간을 1분 이상으로 알려 주세요.",
@@ -47,6 +48,7 @@ UNKNOWN_TASK_QUESTIONS = {
     "complete_task": "어떤 업무를 완료할까요?",
     "update_due": "어떤 업무의 마감을 변경할까요?",
     "delete_task": "어떤 업무를 삭제할까요?",
+    "set_reminder": "어떤 업무의 알림을 바꿀까요?",
 }
 
 
@@ -291,6 +293,27 @@ async def _handle(
             ),
         )
 
+    if decision.action == "set_reminder":
+        # 알림 간격만 바꾼다. Eureka에는 없는 값이라 쓰지 않고, Pi는 GET /api/tasks로 새 간격을 받는다.
+        task = _find_task(open_tasks, decision.args.item_id)
+        offset = decision.args.offset_minutes
+        try:
+            db.set_reminder(task.item_id, offset)
+        except sqlite3.Error:
+            log.exception("reminder was not saved: %s", task.item_id)
+            return _error(request_id, f"{task.name} 업무의 알림 설정을 저장하지 못했어요.")
+        _clear_pending_after_success(user_id, pending)
+        return VoiceResponse(
+            request_id=request_id,
+            status="OK",
+            stt_text=decision.transcript,
+            type="reminder_set",
+            output=Output(
+                tts=f"{task.name} 업무 알림을 마감 {_format_offset(offset)} 전으로 바꿨어요.",
+                lcd=Lcd(expression="happy", text="알림 설정 완료"),
+            ),
+        )
+
     if decision.action == "clarify":
         return remember_and_clarify(decision, decision.question or "어떤 업무인지 더 알려 주세요.")
 
@@ -393,6 +416,14 @@ def _format_due(due_at: datetime) -> str:
     hour = local.hour % 12 or 12
     minute = f" {local.minute}분" if local.minute else ""
     return f"{local.month}월 {local.day}일 {period} {hour}시{minute}"
+
+
+def _format_offset(minutes: int) -> str:
+    """알림 간격(분)을 읽기 좋게 바꾼다. 30 → "30분", 90 → "1시간 30분", 1440 → "1일"."""
+    days, rest = divmod(minutes, 1440)
+    hours, mins = divmod(rest, 60)
+    parts = [f"{days}일"] * bool(days) + [f"{hours}시간"] * bool(hours) + [f"{mins}분"] * bool(mins)
+    return " ".join(parts)
 
 
 def _final_consonant(text: str) -> int:

@@ -1,5 +1,6 @@
 """AI 판단 뒤 등록·조회 정책과 응답을 검증한다. 실제 Eureka는 호출하지 않는다."""
 
+import sqlite3
 from datetime import datetime, time, timedelta
 
 import pytest
@@ -487,10 +488,11 @@ async def test_other_request_cancels_pending_delete(mock_flow, monkeypatch):
     assert task.item_id in mock_flow.tasks
 
 
-async def test_unsupported_action_also_cancels_pending_delete(mock_flow, monkeypatch):
+async def test_reminder_request_also_cancels_pending_delete(mock_flow, monkeypatch):
     task, _ = await ask_to_delete(mock_flow, monkeypatch)
     set_decision(monkeypatch, Decision(
-        transcript="알림 바꿔줘", action="set_reminder", args=DecisionArgs(),
+        transcript="알림 바꿔줘", action="set_reminder",
+        args=DecisionArgs(item_id=task.item_id, offset_minutes=30),
     ))
     await tasks.handle(user_id="pet-01", request_id="req-47", text="알림 바꿔줘")
     assert db.get_pending("pet-01") is None
@@ -587,3 +589,63 @@ def test_check_decision_reports_only_execution_preconditions(action, args, block
 )
 def test_missing_fields_are_asked_at_once(fields, question):
     assert tasks._check_question("create_task", tasks.Blocked("missing", fields)) == question
+
+
+async def test_set_reminder_saves_offset_for_pi(mock_flow, monkeypatch):
+    task = await mock_flow.create_task("보고서 검토", datetime.now(KST) + timedelta(days=1))
+    db.set_reminder(task.item_id, 120)
+    set_decision(monkeypatch, Decision(
+        transcript="보고서 검토 알림 30분 전으로 바꿔줘", action="set_reminder",
+        args=DecisionArgs(item_id=task.item_id, offset_minutes=30),
+    ))
+
+    response = await tasks.handle(user_id="pet-01", request_id="req-70", text="보고서 검토 알림 30분 전으로 바꿔줘")
+
+    assert response.status == "OK"
+    assert response.type == "reminder_set"
+    assert response.output.tts == "보고서 검토 업무 알림을 마감 30분 전으로 바꿨어요."
+    assert db.get_reminders()[task.item_id] == 30
+    device_tasks = await tasks.list_device_tasks()
+    assert [t.offset_minutes for t in device_tasks.tasks] == [30]
+
+
+@pytest.mark.parametrize(("args", "question"), [
+    ({"item_id": "t9", "offset_minutes": 30}, "어떤 업무의 알림을 바꿀까요?"),
+    ({"offset_minutes": 30}, "어떤 업무의 알림을 바꿀까요?"),
+    ({"item_id": "KNOWN"}, "알림 시간을 알려 주세요."),
+    ({"item_id": "KNOWN", "offset_minutes": 0}, "알림 시간을 1분 이상으로 알려 주세요."),
+])
+async def test_set_reminder_clarifies_without_saving(mock_flow, monkeypatch, args, question):
+    task = await mock_flow.create_task("보고서 검토", datetime.now(KST) + timedelta(days=1))
+    if args.get("item_id") == "KNOWN":
+        args = {**args, "item_id": task.item_id}
+    set_decision(monkeypatch, Decision(transcript="알림 바꿔줘", action="set_reminder", args=DecisionArgs(**args)))
+
+    response = await tasks.handle(user_id="pet-01", request_id="req-71", text="알림 바꿔줘")
+
+    assert response.type == "clarification"
+    assert response.output.tts == question
+    assert task.item_id not in db.get_reminders()
+
+
+async def test_set_reminder_db_failure_does_not_claim_success(mock_flow, monkeypatch):
+    task = await mock_flow.create_task("보고서 검토", datetime.now(KST) + timedelta(days=1))
+    set_decision(monkeypatch, Decision(
+        transcript="알림 30분 전", action="set_reminder",
+        args=DecisionArgs(item_id=task.item_id, offset_minutes=30),
+    ))
+
+    def fail(*args):
+        raise sqlite3.OperationalError("locked")
+
+    monkeypatch.setattr(tasks.db, "set_reminder", fail)
+    response = await tasks.handle(user_id="pet-01", request_id="req-72", text="알림 30분 전")
+    assert response.status == "ERROR"
+    assert "바꿨어요" not in response.output.tts
+
+
+@pytest.mark.parametrize(("minutes", "text"), [
+    (30, "30분"), (60, "1시간"), (90, "1시간 30분"), (1440, "1일"), (1530, "1일 1시간 30분"),
+])
+def test_format_offset(minutes, text):
+    assert tasks._format_offset(minutes) == text
