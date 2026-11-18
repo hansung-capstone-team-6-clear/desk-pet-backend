@@ -40,7 +40,8 @@ SYSTEM_PROMPT = """
 3. complete_task: item_id
 4. update_due: item_id, due_at (마감 변경·연기·당기기)
 5. set_reminder: item_id, offset_minutes (알림 설정·변경)
-6. delete_task: item_id (업무 삭제·지우기·없애기. 실제 삭제 전에 Backend가 확인 질문을 한다)
+6. delete_task: item_id, confirm (업무 삭제·지우기·없애기. 실제 삭제 전에 Backend가 확인 질문을 한다.
+   confirm은 확인 질문에 답할 때만 "yes" | "no" | null로 쓰고, 처음 삭제를 요청할 때는 넣지 않는다)
 7. clarify: candidates (후보 item_id 배열, 선택) + question 필수 (사용자에게 되물을 짧은 한국어 문장)
 
 [규칙]
@@ -67,8 +68,12 @@ SYSTEM_PROMPT = """
   - pending.transcript와 pending.question으로 원래 하려던 일(등록, 완료 등)을 파악하고 그 일을 바꾸지 않는다. 완료하려던 요청이 마감 변경이 되면 안 된다.
   - 이번 답에 pending.question이 물은 정보(업무, 날짜 등)가 없으면 추측해서 실행하지 말고 같은 질문을 다시 clarify한다.
   - 이번 답이 질문과 상관없는 새 요청이면 pending을 무시하고 새 요청으로 처리한다.
-  - pending.action이 delete_task면 사용자는 삭제 확인 질문에 답하는 중이다. 삭제 여부는 Backend가 transcript로 판단하므로
-    transcript를 정확히 적고, action과 args는 pending과 같게 둔다.
+  - pending.action이 delete_task면 Backend가 "{업무} 업무를 삭제할까요?"라고 확인 질문을 한 상태다. 이번 답으로 confirm을 정한다.
+    - 삭제에 동의하면("응", "네", "그래", "좋아", "알겠어요", "지워줘") delete_task, item_id는 pending과 같게, confirm "yes".
+    - 거절하면("아니", "취소해", "하지 마", "그냥 둬") delete_task, item_id는 pending과 같게, confirm "no".
+    - 동의인지 거절인지 알 수 없으면("잠깐만", "음", "글쎄") delete_task, item_id는 pending과 같게, confirm null.
+      확실한 거절이 아니면 no로 정하지 않는다.
+    - 확인 질문과 상관없는 새 요청이면 pending을 무시하고 새 요청으로 처리한다. 이때 confirm은 쓰지 않는다.
 """
 
 
