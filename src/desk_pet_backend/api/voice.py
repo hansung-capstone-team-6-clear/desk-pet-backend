@@ -39,7 +39,7 @@ async def voice(
     user_id: Annotated[str | None, Form()] = None,
     request_id: Annotated[str | None, Form()] = None,
 ) -> VoiceResponse:
-    """WAV(16kHz, mono, 16bit, 최대 15초)를 받아 처리한다. 처리는 7초로 제한한다 (Pi는 업로드 포함 10초 대기)."""
+    """WAV(16kHz, mono, 16bit, 최대 15초)를 받아 처리한다. 처리 제한은 services.tasks.handle()에 있다 (쓰기 전 15초, 쓰기 3초)."""
     data = await audio.read(MAX_UPLOAD_BYTES + 1)
     if len(data) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="WAV 파일이 너무 큽니다")

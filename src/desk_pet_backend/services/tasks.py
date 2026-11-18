@@ -5,10 +5,10 @@ Eureka는 eureka.py를 통해서만, 저장은 db.py를 통해서만 접근한�
 
 import asyncio
 import logging
-import re
 import sqlite3
 from datetime import datetime, timedelta
 from time import perf_counter
+from typing import NamedTuple
 
 from desk_pet_backend import db
 from desk_pet_backend.config import settings
@@ -25,29 +25,28 @@ from desk_pet_backend.schemas import (
 from desk_pet_backend.services import ai, task_cache
 
 log = logging.getLogger(__name__)
-HANDLE_TIMEOUT_SECONDS = 7
-CREATE_FLOW_ACTIONS = {"create_task", "clarify"}
-# 날짜·시간 표현과 일반어. 이것만으로 된 이름은 업무 이름이 아니다 (공백을 뺀 문장에 적용).
-NAME_NOISE = re.compile(
-    r"오늘|내일|모레|글피|어제|그제|이번주|다음주|지난주|이번달|다음달|지난달|올해|내년"
-    r"|[월화수목금토일]요일|\d+(?:월|일|시|분|주)?|(?:열한|열두|한|두|세|네|다섯|여섯|일곱|여덟|아홉|열)시"
-    r"|오전|오후|아침|점심|저녁|밤|새벽|정오|자정|반|까지|부터|전|쯤|마감|기한"
-    r"|해야할일|할일|업무|일정|작업|태스크|task|todo|등록|추가|하나|새로운|새|것|거|일|\W|_"
-)
-# 삭제는 되돌릴 수 없을 수 있으므로 문장 전체가 정확히 일치할 때만 답으로 본다.
-DELETE_YES = {
-    "응", "응응", "네", "네네", "예", "예예", "그래", "그래요", "맞아", "맞아요", "맞습니다",
-    "응맞아", "네맞아요", "예맞아요", "좋아", "좋아요", "네좋아요", "해줘", "해주세요",
-    "응해줘", "네해주세요", "그래해줘", "삭제", "삭제해", "삭제해줘", "삭제해주세요", "삭제할게",
-    "응삭제", "네삭제", "응삭제해", "응삭제해줘", "네삭제해", "네삭제해줘", "네삭제해주세요",
-    "예삭제해주세요", "그래삭제해", "그래삭제해줘", "지워", "지워줘", "지워주세요", "응지워",
-    "응지워줘", "네지워주세요", "그래지워", "그래지워줘",
+# 11/06 결정: 업로드 뒤 읽기·Gemini(재시도 포함)는 15초, Eureka 쓰기는 시작부터 3초.
+# Pi는 10초에 지연 안내, 20초에 실패 처리한다 (contracts § 1).
+HANDLE_TIMEOUT_SECONDS = 15
+WRITE_TIMEOUT_SECONDS = 3
+
+# 실행 전제조건 (check_decision). Gemini 오류를 볼 때마다 검사를 늘리지 않는다 — 오류는 프롬프트와 평가셋으로 고친다.
+# action이나 필드를 새로 만들 때만 아래 표를 고친다.
+TASK_ACTIONS = {"complete_task", "update_due", "delete_task"}  # item_id가 미완료 목록에 있어야 하는 action
+REQUIRED_ARGS = {
+    "create_task": ("name", "due_at"),
+    "update_due": ("due_at",),
 }
-DELETE_NO = {
-    "아니", "아니야", "아니요", "아니오", "아뇨", "아니에요", "취소", "취소해", "취소해줘",
-    "취소해주세요", "취소할게", "취소할게요", "아니취소", "아니취소해", "아니요취소해주세요",
-    "하지마", "하지마세요", "삭제하지마", "삭제하지마세요", "아니삭제하지마", "지우지마",
-    "지우지마세요", "삭제안해", "안해", "안할래", "안할게요", "그만", "그만해", "됐어", "됐어요",
+# 빠진 값은 이 이름표를 이어 붙여 한 번에 묻는다 ("업무 이름과 마감 시간을 알려 주세요.").
+FIELD_LABELS = {"name": "업무 이름", "due_at": "마감 시간"}
+CHECK_QUESTIONS = {
+    "past_due": "미래의 마감 시간을 알려 주세요.",
+    "bad_offset": "알림 시간을 1분 이상으로 알려 주세요.",
+}
+UNKNOWN_TASK_QUESTIONS = {
+    "complete_task": "어떤 업무를 완료할까요?",
+    "update_due": "어떤 업무의 마감을 변경할까요?",
+    "delete_task": "어떤 업무를 삭제할까요?",
 }
 
 
@@ -78,10 +77,10 @@ async def handle(
     audio: bytes | None = None,
     text: str | None = None,
 ) -> VoiceResponse:
-    """요청 하나를 처리해 Pi에 돌려줄 응답을 만든다. 7초 안에 끝나야 한다 (넘으면 status ERROR).
+    """요청 하나를 처리해 Pi에 돌려줄 응답을 만든다. 넘으면 status ERROR.
 
-    Pi는 업로드 시작부터 10초를 기다리는데, 이 타이머는 업로드가 끝난 뒤 시작한다.
-    업로드·왕복에 쓸 시간을 남겨 Pi가 끊기 전에 ERROR 응답을 받게 한다.
+    제한 시간: Eureka 쓰기 전까지 HANDLE_TIMEOUT_SECONDS(15초), 쓰기는 시작부터 WRITE_TIMEOUT_SECONDS(3초).
+    타이머는 업로드가 끝난 뒤 시작한다. Pi는 20초에 실패 처리하므로 업로드·왕복에 쓸 시간을 남긴다.
 
     1. Eureka 미완료 업무 목록 + db의 pending(user_id별 재질문 대기) 조회
     2. ai.analyze() 1회 호출 → Decision (transcript는 응답의 stt_text가 된다)
@@ -99,8 +98,9 @@ async def handle(
     started = perf_counter()
     status = "ERROR"
     try:
-        async with asyncio.timeout(HANDLE_TIMEOUT_SECONDS):
+        async with asyncio.timeout(HANDLE_TIMEOUT_SECONDS) as timer:
             response = await _handle(
+                timer=timer,
                 user_id=user_id,
                 request_id=request_id,
                 audio=audio,
@@ -126,6 +126,7 @@ async def handle(
 
 async def _handle(
     *,
+    timer: asyncio.Timeout,
     user_id: str,
     request_id: str,
     audio: bytes | None,
@@ -137,7 +138,7 @@ async def _handle(
     step_started = perf_counter()
     open_tasks = await task_cache.get_open_tasks(eureka)
     timings["eureka_list"] = round((perf_counter() - step_started) * 1000)
-    pending, previous_utterances, delete_item_id = _split_pending(db.get_pending(user_id))
+    pending, delete_item_id = _split_pending(db.get_pending(user_id))
     step_started = perf_counter()
     analyzed = await ai.analyze(
         audio=audio,
@@ -148,21 +149,20 @@ async def _handle(
     )
     timings["gemini"] = round((perf_counter() - step_started) * 1000)
     decision = Decision.model_validate(analyzed)
-    spoken = text if text is not None else decision.transcript
-    utterances = _flow_utterances(pending, previous_utterances, decision.action, spoken)
 
     def remember_and_clarify(asked: Decision, question: str) -> VoiceResponse:
-        return _remember_and_clarify(user_id, request_id, asked, utterances, question)
+        return _remember_and_clarify(user_id, request_id, asked, question)
 
     if delete_item_id is not None:
-        # 삭제 대기 중인 답은 AI 판단과 상관없이 받아쓴 문장으로 판정한다. 그 밖의 말은 삭제를 취소한다.
+        # 삭제 확인 질문에 대한 답. 동의 여부는 AI가 confirm으로 판단하고, Backend는 그 답이
+        # 확인 질문의 대상 업무에 대한 것인지만 검사한다. 다른 업무·다른 요청이면 삭제를 취소하고 새 요청으로 처리한다.
         db.clear_pending(user_id)
-        answer = _compact_answer(spoken)
-        if answer in DELETE_YES:
+        answered = decision.action == "delete_task" and decision.args.item_id == delete_item_id
+        if answered and decision.args.confirm == "yes":
             task = _find_task(open_tasks, delete_item_id)
             if task is None:
                 return _error(request_id, "삭제할 업무를 찾지 못했어요.")
-            await _write(eureka, eureka.delete_task(task.item_id))
+            await _write(timer, eureka, eureka.delete_task(task.item_id))
             task_cache.on_deleted(eureka, task.item_id)
             log.info("task deleted: request_id=%s item_id=%s name=%s", request_id, task.item_id, task.name)
             try:
@@ -179,7 +179,7 @@ async def _handle(
                     lcd=Lcd(expression="happy", text="업무 삭제 완료"),
                 ),
             )
-        if answer in DELETE_NO:
+        if answered and decision.args.confirm == "no":
             return VoiceResponse(
                 request_id=request_id,
                 status="OK",
@@ -190,16 +190,19 @@ async def _handle(
                     lcd=Lcd(expression="speaking", text="삭제 취소"),
                 ),
             )
+        # confirm이 null이면 (동의인지 알 수 없음) 아래 delete_task 처리가 같은 업무로 다시 확인한다.
+
+    if decision.action in REQUIRED_ARGS or decision.action in TASK_ACTIONS:
+        blocked = check_decision(decision, open_tasks, now)
+        if blocked is not None:
+            return remember_and_clarify(decision, _check_question(decision.action, blocked))
 
     if decision.action == "delete_task":
         task = _find_task(open_tasks, decision.args.item_id)
-        if task is None:
-            return remember_and_clarify(decision, "어떤 업무를 삭제할까요?")
         db.set_pending(
             user_id,
             {
                 **decision.model_dump(mode="json"),
-                "utterances": utterances,
                 "delete_item_id": task.item_id,
             },
         )
@@ -210,23 +213,11 @@ async def _handle(
         )
 
     if decision.action == "create_task":
-        name = (decision.args.name or "").strip()
+        name = decision.args.name.strip()
         due_at = decision.args.due_at
         offset = decision.args.offset_minutes
-        if name and (is_generic_name(name) or name_source(name, utterances, open_tasks) is None):
-            # 근거 없는 이름만 지운다. 이 요청의 마감·알림 값은 다시 묻지 않도록 남긴다.
-            without_name = decision.args.model_copy(update={"name": None})
-            return remember_and_clarify(
-                decision.model_copy(update={"args": without_name}), "어떤 일을 추가할까요?"
-            )
-        if not name or due_at is None:
-            return remember_and_clarify(decision, "업무 이름과 마감 시간을 알려 주세요.")
-        if due_at.tzinfo is None or due_at.utcoffset() is None or due_at <= now:
-            return remember_and_clarify(decision, "미래의 마감 시간을 알려 주세요.")
-        if offset is not None and offset <= 0:
-            return remember_and_clarify(decision, "알림 시간을 1분 이상으로 알려 주세요.")
 
-        created = await _write(eureka, eureka.create_task(name, due_at))
+        created = await _write(timer, eureka, eureka.create_task(name, due_at))
         task_cache.on_created(eureka, created)
         try:
             db.set_reminder(created.item_id, offset or settings.default_reminder_minutes)
@@ -269,9 +260,7 @@ async def _handle(
 
     if decision.action == "complete_task":
         task = _find_task(open_tasks, decision.args.item_id)
-        if task is None:
-            return remember_and_clarify(decision, "어떤 업무를 완료할까요?")
-        await _write(eureka, eureka.complete_task(task.item_id))
+        await _write(timer, eureka, eureka.complete_task(task.item_id))
         task_cache.on_completed(eureka, task.item_id)
         _clear_pending_after_success(user_id, pending)
         return VoiceResponse(
@@ -287,14 +276,8 @@ async def _handle(
 
     if decision.action == "update_due":
         task = _find_task(open_tasks, decision.args.item_id)
-        if task is None:
-            return remember_and_clarify(decision, "어떤 업무의 마감을 변경할까요?")
         due_at = decision.args.due_at
-        if due_at is None:
-            return remember_and_clarify(decision, f"{task.name} 업무의 마감을 언제로 변경할까요?")
-        if due_at.tzinfo is None or due_at.utcoffset() is None or due_at <= now:
-            return remember_and_clarify(decision, "미래의 마감 시간을 알려 주세요.")
-        await _write(eureka, eureka.update_due(task.item_id, due_at))
+        await _write(timer, eureka, eureka.update_due(task.item_id, due_at))
         task_cache.on_due_updated(eureka, task.item_id, due_at)
         _clear_pending_after_success(user_id, pending)
         return VoiceResponse(
@@ -314,8 +297,12 @@ async def _handle(
     return _error(request_id, "이 작업은 아직 지원하지 않아요.")
 
 
-async def _write(eureka, write):
-    """Eureka 쓰기를 실행한다. 실패하거나 시간 초과로 끊기면 목록을 바로 다시 조회한다."""
+async def _write(timer: asyncio.Timeout, eureka, write):
+    """Eureka 쓰기를 실행한다. 실패하거나 시간 초과로 끊기면 목록을 바로 다시 조회한다.
+
+    쓰기를 시작하면 남은 시간과 상관없이 마감을 지금부터 WRITE_TIMEOUT_SECONDS로 다시 잡는다.
+    """
+    timer.reschedule(asyncio.get_running_loop().time() + WRITE_TIMEOUT_SECONDS)
     try:
         return await write
     except (Exception, asyncio.CancelledError):
@@ -323,65 +310,60 @@ async def _write(eureka, write):
         raise
 
 
-def _compact(value: str) -> str:
-    return "".join(value.split()).casefold()
+class Blocked(NamedTuple):
+    """check_decision이 실행을 막은 이유. reason이 "missing"이면 fields에 빠진 값이 모두 들어 있다."""
+
+    reason: str  # unknown_task | missing | past_due | bad_offset
+    fields: tuple[str, ...] = ()
 
 
-def is_generic_name(name: str) -> bool:
-    """날짜·시간 표현과 일반어를 빼면 아무것도 남지 않는 이름인지 본다 ("할 일", "내일 오후 3시")."""
-    return not NAME_NOISE.sub("", _compact(name))
+def check_decision(decision: Decision, open_tasks: list[Task], now: datetime) -> Blocked | None:
+    """실행 전제조건만 검사한다. 통과하면 None, 막히면 Blocked.
 
-
-def name_source(name: str, utterances: list[str], open_tasks: list[Task]) -> str | None:
-    """새 업무 이름의 근거를 사용자 발화에서 찾는다. 업무 목록은 근거로 쓰지 않는다.
-
-    "exact": 공백을 뺀 이름이 한 발화에 연속으로 나온다.
-    "words": 목록에 없는 이름의 단어가 한 발화에 모두 나온다 (보조 필터).
-    None: 근거가 없다.
-
-    오판을 줄이는 장치일 뿐 등록 의도를 증명하지는 않는다. 단어를 조합한 이름("보고서랑 발표 준비해" →
-    "발표 보고서 준비")이나, 수정 요청을 등록으로 잘못 판단한 경우는 막지 못한다.
+    말뜻을 해석하지 않고 값만 본다. 무엇을 할지 판단하는 것은 AI다.
     """
-    spoken = [_compact(utterance) for utterance in utterances]
-    compact_name = _compact(name)
-    if any(compact_name in utterance for utterance in spoken):
-        return "exact"
-    if any(_compact(task.name) == compact_name for task in open_tasks):
-        return None
-    words = [word.casefold() for word in name.split()]
-    if any(all(word in utterance for word in words) for utterance in spoken):
-        return "words"
+    args = decision.args
+    if decision.action in TASK_ACTIONS and _find_task(open_tasks, args.item_id) is None:
+        return Blocked("unknown_task")
+    missing = tuple(
+        field
+        for field in REQUIRED_ARGS.get(decision.action, ())
+        if getattr(args, field) is None
+        or (isinstance(getattr(args, field), str) and not getattr(args, field).strip())
+    )
+    if missing:
+        return Blocked("missing", missing)
+    if args.due_at is not None and (args.due_at.utcoffset() is None or args.due_at <= now):
+        return Blocked("past_due")
+    if args.offset_minutes is not None and args.offset_minutes <= 0:
+        return Blocked("bad_offset")
     return None
 
 
-def _compact_answer(spoken: str) -> str:
-    return re.sub(r"[\s.,!?~…]", "", spoken)
+def _check_question(action: str, blocked: Blocked) -> str:
+    if blocked.reason == "unknown_task":
+        return UNKNOWN_TASK_QUESTIONS[action]
+    if blocked.reason == "missing":
+        return f"{_join_with_and([FIELD_LABELS[field] for field in blocked.fields])} 알려 주세요."
+    return CHECK_QUESTIONS[blocked.reason]
 
 
-def _split_pending(stored: dict | None) -> tuple[dict | None, list[str], str | None]:
-    """저장된 재질문 맥락을 AI에 넘길 Decision, 이름 검증용 발화, 삭제 대기 대상으로 나눈다."""
+def _join_with_and(labels: list[str]) -> str:
+    """["업무 이름", "마감 시간"] → "업무 이름과 마감 시간을". 조사는 받침에 맞춘다."""
+    text = labels[0]
+    for label in labels[1:]:
+        text += ("과 " if _final_consonant(text) else "와 ") + label
+    return text + ("을" if _final_consonant(text) else "를")
+
+
+def _split_pending(stored: dict | None) -> tuple[dict | None, str | None]:
+    """저장된 재질문 맥락을 AI에 넘길 Decision과 삭제 대기 대상으로 나눈다."""
     if stored is None:
-        return None, [], None
+        return None, None
     pending = dict(stored)
-    utterances = pending.pop("utterances", None)
+    pending.pop("utterances", None)  # 이름 검사를 없애기 전에 저장된 값 (60초 뒤 사라진다)
     delete_item_id = pending.pop("delete_item_id", None)
-    if utterances is None:
-        transcript = pending.get("transcript")
-        utterances = [transcript] if transcript else []
-    return pending, utterances, delete_item_id
-
-
-def _flow_utterances(
-    pending: dict | None, previous: list[str], action: str, utterance: str
-) -> list[str]:
-    """이번 등록 흐름의 발화를 최초 요청 1개 + 최근 2개로 유지한다. 완료·변경 재질문의 발화는 잇지 않는다."""
-    continues = (
-        pending is not None
-        and pending.get("action") in CREATE_FLOW_ACTIONS
-        and action in CREATE_FLOW_ACTIONS
-    )
-    history = [*previous, utterance] if continues else [utterance]
-    return history[:1] + history[1:][-2:]
+    return pending, delete_item_id
 
 
 def _find_task(tasks: list[Task], item_id: str | None) -> Task | None:
@@ -438,9 +420,9 @@ def _clarify(request_id: str, transcript: str, question: str) -> VoiceResponse:
 
 
 def _remember_and_clarify(
-    user_id: str, request_id: str, decision: Decision, utterances: list[str], question: str
+    user_id: str, request_id: str, decision: Decision, question: str
 ) -> VoiceResponse:
-    db.set_pending(user_id, {**decision.model_dump(mode="json"), "utterances": utterances})
+    db.set_pending(user_id, decision.model_dump(mode="json"))
     return _clarify(request_id, decision.transcript, question)
 
 

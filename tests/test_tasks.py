@@ -7,7 +7,7 @@ import pytest
 from desk_pet_backend import db
 from desk_pet_backend.config import settings
 from desk_pet_backend.eureka import KST, EurekaError, EurekaMock
-from desk_pet_backend.schemas import Decision, DecisionArgs
+from desk_pet_backend.schemas import Decision, DecisionArgs, Task
 from desk_pet_backend.services import tasks
 
 
@@ -169,10 +169,7 @@ async def test_clarification_is_passed_to_next_request_and_cleared_after_create(
     assert response.type == "clarification"
     assert response.output.tts == "마감은 언제인가요?"
     assert calls[0]["pending"] is None
-    assert db.get_pending("pet-01") == {
-        **first.model_dump(mode="json"),
-        "utterances": ["보고서 등록해줘"],
-    }
+    assert db.get_pending("pet-01") == first.model_dump(mode="json")
     assert db.get_pending("pet-02") is None
     assert mock_flow.tasks == {}
 
@@ -263,7 +260,7 @@ async def test_update_due_changes_task_and_returns_success(mock_flow, monkeypatc
 
 @pytest.mark.parametrize("known_item, due_delta, question", [
     (False, timedelta(days=1), "어떤 업무의 마감을 변경할까요?"),
-    (True, None, "보고서 업무의 마감을 언제로 변경할까요?"),
+    (True, None, "마감 시간을 알려 주세요."),
     (True, timedelta(days=-1), "미래의 마감 시간을 알려 주세요."),
 ])
 async def test_update_due_clarifies_without_calling_eureka(
@@ -308,157 +305,6 @@ def create_decision(transcript, name, due_at=None):
     return Decision(
         transcript=transcript, action="create_task", args=DecisionArgs(name=name, due_at=due_at),
     )
-
-
-@pytest.mark.parametrize("text", [
-    "내일 오후 3시까지 할 일 하나 추가해줘",
-    "보고서 확인하고 작성 일정도 알려줘. 새 업무는 내일 추가해 줘.",
-])
-async def test_name_borrowed_from_task_list_is_not_created(mock_flow, monkeypatch, text):
-    await mock_flow.create_task("보고서 작성", datetime.now(KST) + timedelta(days=5))
-    due = datetime.now(KST) + timedelta(days=1)
-    set_decision(monkeypatch, create_decision(text, "보고서 작성", due))
-
-    response = await tasks.handle(user_id="pet-01", request_id="req-20", text=text)
-
-    assert response.type == "clarification"
-    assert response.output.tts == "어떤 일을 추가할까요?"
-    assert len(mock_flow.tasks) == 1
-    pending = db.get_pending("pet-01")
-    assert pending["args"]["name"] is None
-    assert pending["args"]["due_at"] is not None
-
-
-@pytest.mark.parametrize("text", [
-    "보고서 작성 추가해 줘", "보고서 작성을 추가해 줘", "보고서작성 추가해 줘",
-])
-async def test_same_name_as_open_task_passes_when_spoken_continuously(mock_flow, monkeypatch, text):
-    await mock_flow.create_task("보고서 작성", datetime.now(KST) + timedelta(days=5))
-    set_decision(monkeypatch, create_decision(
-        text, "보고서 작성", datetime.now(KST) + timedelta(days=1),
-    ))
-    response = await tasks.handle(user_id="pet-01", request_id="req-21", text=text)
-    assert response.type == "task_created"
-    assert len(mock_flow.tasks) == 2
-
-
-async def test_name_without_any_source_is_not_created(mock_flow, monkeypatch):
-    text = "내일까지 할 일 추가해줘"
-    set_decision(monkeypatch, create_decision(
-        text, "팀 회의", datetime.now(KST) + timedelta(days=1),
-    ))
-    response = await tasks.handle(user_id="pet-01", request_id="req-22", text=text)
-    assert response.type == "clarification"
-    assert mock_flow.tasks == {}
-
-
-async def test_known_limitation_combined_words_pass_name_policy(mock_flow, monkeypatch):
-    """단어를 조합한 이름은 정책상 통과한다. 정상 동작이 아니라 알려진 한계이며 AI 평가에서 다룬다."""
-    text = "보고서랑 발표 준비해"
-    set_decision(monkeypatch, create_decision(
-        text, "발표 보고서 준비", datetime.now(KST) + timedelta(days=1),
-    ))
-    response = await tasks.handle(user_id="pet-01", request_id="req-23", text=text)
-    assert response.type == "task_created"
-
-
-async def test_first_utterance_is_kept_through_repeated_clarification(mock_flow, monkeypatch):
-    due = datetime.now(KST) + timedelta(days=1)
-    turns = [
-        ("보고서 작성 추가해줘", Decision(
-            transcript="보고서 작성 추가해줘", action="clarify",
-            args=DecisionArgs(name="보고서 작성"), question="마감은 언제인가요?",
-        )),
-        ("내일", Decision(
-            transcript="내일", action="clarify",
-            args=DecisionArgs(name="보고서 작성"), question="몇 시까지인가요?",
-        )),
-        ("오후", Decision(
-            transcript="오후", action="clarify",
-            args=DecisionArgs(name="보고서 작성"), question="몇 시인지 알려 주세요.",
-        )),
-        ("세 시쯤", Decision(
-            transcript="세 시쯤", action="clarify",
-            args=DecisionArgs(name="보고서 작성"), question="정확한 시간을 알려 주세요.",
-        )),
-    ]
-    received = []
-    for text, decision in turns:
-        async def analyze(decision=decision, **kwargs):
-            received.append(kwargs["pending"])
-            return decision
-
-        monkeypatch.setattr(tasks.ai, "analyze", analyze)
-        await tasks.handle(user_id="pet-01", request_id="req-24", text=text)
-
-    assert db.get_pending("pet-01")["utterances"] == ["보고서 작성 추가해줘", "오후", "세 시쯤"]
-    assert all(pending is None or "utterances" not in pending for pending in received)
-
-    set_decision(monkeypatch, create_decision("오후 세 시", "보고서 작성", due))
-    response = await tasks.handle(user_id="pet-01", request_id="req-25", text="오후 세 시")
-    assert response.type == "task_created"
-    assert db.get_pending("pet-01") is None
-
-
-async def test_correct_name_after_failed_validation_creates_task(mock_flow, monkeypatch):
-    await mock_flow.create_task("보고서 작성", datetime.now(KST) + timedelta(days=5))
-    due = datetime.now(KST) + timedelta(days=1)
-    first = "내일 오후 3시까지 할 일 하나 추가해줘"
-    set_decision(monkeypatch, create_decision(first, "보고서 작성", due))
-    response = await tasks.handle(user_id="pet-01", request_id="req-26", text=first)
-    assert response.type == "clarification"
-
-    set_decision(monkeypatch, create_decision("과제 제출", "과제 제출", due))
-    response = await tasks.handle(user_id="pet-01", request_id="req-27", text="과제 제출")
-    assert response.type == "task_created"
-    assert "과제 제출" in response.output.tts
-    assert db.get_pending("pet-01") is None
-
-
-async def test_complete_clarification_is_not_a_name_source(mock_flow, monkeypatch):
-    await mock_flow.create_task("보고서 작성", datetime.now(KST) + timedelta(days=5))
-    spoken = "보고서 작성 끝난 것 같아"
-    set_decision(monkeypatch, Decision(
-        transcript=spoken, action="complete_task", args=DecisionArgs(),
-    ))
-    await tasks.handle(user_id="pet-01", request_id="req-28", text=spoken)
-
-    set_decision(monkeypatch, create_decision(
-        "내일까지", "보고서 작성", datetime.now(KST) + timedelta(days=1),
-    ))
-    response = await tasks.handle(user_id="pet-01", request_id="req-29", text="내일까지")
-    assert response.type == "clarification"
-    assert len(mock_flow.tasks) == 1
-
-
-@pytest.mark.parametrize("name", [
-    "할 일", "할일", "해야 할 일", "업무", "일정", "새 업무", "할 일 하나", "일정 추가",
-    "내일 오후 3시", "내일 오후 3시까지", "오후 세 시", "11월 20일", "다음 주 월요일", "오늘", "마감",
-])
-async def test_generic_or_date_only_name_is_not_created(mock_flow, monkeypatch, name):
-    due = datetime.now(KST) + timedelta(days=1)
-    spoken = f"{name} 추가해줘"
-    set_decision(monkeypatch, create_decision(spoken, name, due))
-
-    response = await tasks.handle(user_id="pet-01", request_id="req-60", text=spoken)
-
-    assert response.type == "clarification"
-    assert response.output.tts == "어떤 일을 추가할까요?"
-    assert mock_flow.tasks == {}
-    pending = db.get_pending("pet-01")
-    assert pending["args"]["name"] is None
-    assert pending["args"]["due_at"] is not None
-
-
-@pytest.mark.parametrize("name", [
-    "회의", "시험", "오늘 회의 준비", "내일 발표", "일정 조율", "업무 보고", "할 일 정리", "일본어 공부",
-    "3월 보고서", "등록금 납부", "하나은행 방문", "이메일", "반 모임", "3시 회의",
-])
-async def test_real_names_containing_noise_words_are_created(mock_flow, monkeypatch, name):
-    spoken = f"{name} 추가해줘"
-    set_decision(monkeypatch, create_decision(spoken, name, datetime.now(KST) + timedelta(days=1)))
-    response = await tasks.handle(user_id="pet-01", request_id="req-61", text=spoken)
-    assert response.type == "task_created"
 
 
 @pytest.mark.parametrize("range_name", ["today", "week", "all"])
@@ -547,13 +393,17 @@ async def test_first_delete_request_only_asks(mock_flow, monkeypatch):
     assert db.get_pending("pet-01")["delete_item_id"] == task.item_id
 
 
-@pytest.mark.parametrize("answer", [
-    "응", "네.", "네 삭제해줘", "그래 삭제해", "맞습니다", "네, 지워 주세요", "응 해줘", "그래 지워!",
-])
-async def test_yes_deletes_task_and_reminder_regardless_of_ai_decision(mock_flow, monkeypatch, answer):
+def confirm_decision(text, item_id, confirm):
+    return Decision(
+        transcript=text, action="delete_task", args=DecisionArgs(item_id=item_id, confirm=confirm),
+    )
+
+
+@pytest.mark.parametrize("answer", ["응", "응응", "알겠어요", "그래 지워"])
+async def test_ai_yes_deletes_task_and_reminder(mock_flow, monkeypatch, answer):
     task, _ = await ask_to_delete(mock_flow, monkeypatch)
     db.set_reminder(task.item_id, 60)
-    set_decision(monkeypatch, answer_decision(answer))
+    set_decision(monkeypatch, confirm_decision(answer, task.item_id, "yes"))
 
     response = await tasks.handle(user_id="pet-01", request_id="req-41", text=answer)
 
@@ -566,30 +416,43 @@ async def test_yes_deletes_task_and_reminder_regardless_of_ai_decision(mock_flow
         assert conn.execute("SELECT 1 FROM reminders WHERE item_id = ?", (task.item_id,)).fetchone() is None
 
 
-def test_delete_answer_lists_do_not_overlap():
-    assert not tasks.DELETE_YES & tasks.DELETE_NO
-
-
-@pytest.mark.parametrize("answer", ["응 근데 잠깐만", "괜찮아", "음", "어", "글쎄"])
-async def test_ambiguous_answer_does_not_delete(mock_flow, monkeypatch, answer):
+async def test_ai_no_cancels_delete(mock_flow, monkeypatch):
     task, _ = await ask_to_delete(mock_flow, monkeypatch)
-    set_decision(monkeypatch, answer_decision(answer))
-    response = await tasks.handle(user_id="pet-01", request_id="req-52", text=answer)
-    assert response.type == "clarification"
-    assert task.item_id in mock_flow.tasks
-    assert "delete_item_id" not in db.get_pending("pet-01")
-
-
-@pytest.mark.parametrize("answer", [
-    "아니", "아니요", "취소해줘", "삭제하지 마", "아니에요", "지우지 마세요", "아니, 취소해", "됐어요",
-])
-async def test_no_cancels_delete(mock_flow, monkeypatch, answer):
-    task, _ = await ask_to_delete(mock_flow, monkeypatch)
-    set_decision(monkeypatch, answer_decision(answer, "delete_task"))
-    response = await tasks.handle(user_id="pet-01", request_id="req-42", text=answer)
+    set_decision(monkeypatch, confirm_decision("아 그냥 둬", task.item_id, "no"))
+    response = await tasks.handle(user_id="pet-01", request_id="req-42", text="아 그냥 둬")
     assert response.type == "task_delete_cancelled"
     assert task.item_id in mock_flow.tasks
     assert db.get_pending("pet-01") is None
+
+
+async def test_unclear_answer_asks_again_for_same_task(mock_flow, monkeypatch):
+    task, _ = await ask_to_delete(mock_flow, monkeypatch)
+    set_decision(monkeypatch, confirm_decision("음", task.item_id, None))
+    response = await tasks.handle(user_id="pet-01", request_id="req-52", text="음")
+    assert response.type == "clarification"
+    assert "보고서 작성 업무를 삭제할까요?" in response.output.tts
+    assert task.item_id in mock_flow.tasks
+    assert db.get_pending("pet-01")["delete_item_id"] == task.item_id
+
+
+async def test_yes_for_another_task_does_not_delete_either(mock_flow, monkeypatch):
+    """AI가 동의라고 판단해도 확인 질문의 대상이 아닌 업무면 지우지 않고, 그 업무를 다시 확인한다."""
+    task, _ = await ask_to_delete(mock_flow, monkeypatch)
+    other = await mock_flow.create_task("발표 준비", datetime.now(KST) + timedelta(days=2))
+    set_decision(monkeypatch, confirm_decision("응", other.item_id, "yes"))
+    response = await tasks.handle(user_id="pet-01", request_id="req-53", text="응")
+    assert response.type == "clarification"
+    assert "발표 준비 업무를 삭제할까요?" in response.output.tts
+    assert task.item_id in mock_flow.tasks and other.item_id in mock_flow.tasks
+    assert db.get_pending("pet-01")["delete_item_id"] == other.item_id
+
+
+async def test_yes_without_confirmation_question_only_asks(mock_flow, monkeypatch):
+    task = await mock_flow.create_task("보고서 작성", datetime.now(KST) + timedelta(days=1))
+    set_decision(monkeypatch, confirm_decision("보고서 작성 지워", task.item_id, "yes"))
+    response = await tasks.handle(user_id="pet-01", request_id="req-54", text="보고서 작성 지워")
+    assert response.type == "clarification"
+    assert task.item_id in mock_flow.tasks
 
 
 async def test_ai_saying_delete_again_does_not_execute(mock_flow, monkeypatch):
@@ -618,7 +481,7 @@ async def test_other_request_cancels_pending_delete(mock_flow, monkeypatch):
     assert response.type == "task_list"
     assert db.get_pending("pet-01") is None
 
-    set_decision(monkeypatch, answer_decision("응"))
+    set_decision(monkeypatch, confirm_decision("응", task.item_id, "yes"))
     response = await tasks.handle(user_id="pet-01", request_id="req-46", text="응")
     assert response.type == "clarification"
     assert task.item_id in mock_flow.tasks
@@ -647,7 +510,7 @@ async def test_delete_unknown_task_clarifies_without_delete(mock_flow, monkeypat
 async def test_confirm_when_task_is_gone_reports_error(mock_flow, monkeypatch):
     task, _ = await ask_to_delete(mock_flow, monkeypatch)
     await mock_flow.complete_task(task.item_id)
-    set_decision(monkeypatch, answer_decision("응"))
+    set_decision(monkeypatch, confirm_decision("응", task.item_id, "yes"))
     response = await tasks.handle(user_id="pet-01", request_id="req-49", text="응")
     assert response.status == "ERROR"
     assert response.output.tts == "삭제할 업무를 찾지 못했어요."
@@ -655,8 +518,8 @@ async def test_confirm_when_task_is_gone_reports_error(mock_flow, monkeypatch):
 
 
 async def test_eureka_failure_does_not_claim_delete_and_clears_pending(mock_flow, monkeypatch):
-    await ask_to_delete(mock_flow, monkeypatch)
-    set_decision(monkeypatch, answer_decision("응"))
+    task, _ = await ask_to_delete(mock_flow, monkeypatch)
+    set_decision(monkeypatch, confirm_decision("응", task.item_id, "yes"))
 
     async def fail_delete(item_id):
         raise EurekaError("test failure")
@@ -682,13 +545,45 @@ async def test_delete_marker_is_not_passed_to_ai(mock_flow, monkeypatch):
     assert "utterances" not in received[0]
 
 
-async def test_old_pending_without_utterances_falls_back_to_transcript(mock_flow, monkeypatch):
-    db.set_pending("pet-01", Decision(
-        transcript="보고서 작성 추가해줘", action="clarify",
-        args=DecisionArgs(name="보고서 작성"), question="마감은 언제인가요?",
-    ).model_dump(mode="json"))
-    set_decision(monkeypatch, create_decision(
-        "내일까지", "보고서 작성", datetime.now(KST) + timedelta(days=1),
-    ))
-    response = await tasks.handle(user_id="pet-01", request_id="req-30", text="내일까지")
-    assert response.type == "task_created"
+CHECK_NOW = datetime(2026, 10, 8, 10, 0, tzinfo=KST)
+CHECK_TASKS = [Task(item_id="t1", name="보고서 검토", due_at=CHECK_NOW + timedelta(days=1), status="todo")]
+
+
+@pytest.mark.parametrize(
+    ("action", "args", "blocked"),
+    [
+        ("complete_task", {"item_id": "t1"}, None),
+        ("complete_task", {"item_id": "t9"}, tasks.Blocked("unknown_task")),
+        ("complete_task", {}, tasks.Blocked("unknown_task")),
+        ("delete_task", {"item_id": "t9"}, tasks.Blocked("unknown_task")),
+        ("update_due", {"item_id": "t1"}, tasks.Blocked("missing", ("due_at",))),
+        ("update_due", {"item_id": "t1", "due_at": CHECK_NOW - timedelta(hours=1)}, tasks.Blocked("past_due")),
+        ("update_due", {"item_id": "t1", "due_at": datetime(2026, 10, 9, 15)}, tasks.Blocked("past_due")),
+        ("create_task", {"due_at": CHECK_NOW + timedelta(days=1)}, tasks.Blocked("missing", ("name",))),
+        ("create_task", {"name": "  ", "due_at": CHECK_NOW + timedelta(days=1)}, tasks.Blocked("missing", ("name",))),
+        ("create_task", {"name": "보고서"}, tasks.Blocked("missing", ("due_at",))),
+        ("create_task", {}, tasks.Blocked("missing", ("name", "due_at"))),
+        (
+            "create_task",
+            {"name": "보고서", "due_at": CHECK_NOW + timedelta(days=1), "offset_minutes": 0},
+            tasks.Blocked("bad_offset"),
+        ),
+        ("create_task", {"name": "보고서", "due_at": CHECK_NOW + timedelta(days=1), "offset_minutes": 30}, None),
+        ("list_tasks", {"range": "all"}, None),
+    ],
+)
+def test_check_decision_reports_only_execution_preconditions(action, args, blocked):
+    decision = Decision(transcript="", action=action, args=DecisionArgs(**args))
+    assert tasks.check_decision(decision, CHECK_TASKS, CHECK_NOW) == blocked
+
+
+@pytest.mark.parametrize(
+    ("fields", "question"),
+    [
+        (("name",), "업무 이름을 알려 주세요."),
+        (("due_at",), "마감 시간을 알려 주세요."),
+        (("name", "due_at"), "업무 이름과 마감 시간을 알려 주세요."),
+    ],
+)
+def test_missing_fields_are_asked_at_once(fields, question):
+    assert tasks._check_question("create_task", tasks.Blocked("missing", fields)) == question

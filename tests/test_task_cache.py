@@ -169,7 +169,7 @@ async def test_voice_delete_removes_task_from_cache(eureka, monkeypatch):
     await task_cache.get_open_tasks(eureka)
     answers = iter([
         Decision(transcript="보고서 작성 삭제해줘", action="delete_task", args=DecisionArgs(item_id=task.item_id)),
-        Decision(transcript="응", action="clarify", args=DecisionArgs(), question="무엇을 할까요?"),
+        Decision(transcript="응", action="delete_task", args=DecisionArgs(item_id=task.item_id, confirm="yes")),
     ])
 
     async def analyze(**kwargs):

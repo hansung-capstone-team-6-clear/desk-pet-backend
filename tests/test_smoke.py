@@ -256,3 +256,43 @@ async def test_mock_eureka_hides_done_tasks():
     task = await eureka.create_task("보고서 검토", datetime(2026, 10, 9, 15, 0, tzinfo=KST))
     await eureka.complete_task(task.item_id)
     assert await eureka.list_open_tasks() == []
+
+
+def _complete_first_task(eureka_cls, monkeypatch, tmp_path, *, gemini_delay, write_delay):
+    """첫 업무 완료 요청을 Gemini·쓰기 지연을 넣어 보낸다. 제한 시간은 0.5초(쓰기 전) / 0.3초(쓰기)로 줄인다."""
+    monkeypatch.setattr(settings, "device_token", "secret")
+    monkeypatch.setattr(settings, "db_path", str(tmp_path / "voice.db"))
+    monkeypatch.setattr(voice.tasks, "HANDLE_TIMEOUT_SECONDS", 0.5)
+    monkeypatch.setattr(voice.tasks, "WRITE_TIMEOUT_SECONDS", 0.3)
+    eureka = eureka_cls()
+    asyncio.run(eureka.create_task("보고서 검토", datetime(2099, 1, 1, 15, 0, tzinfo=KST)))
+    monkeypatch.setattr(voice.tasks, "get_eureka", lambda: eureka)
+    original_complete = eureka.complete_task
+
+    async def slow_complete(item_id):
+        await asyncio.sleep(write_delay)
+        await original_complete(item_id)
+
+    monkeypatch.setattr(eureka, "complete_task", slow_complete)
+
+    async def analyze(**kwargs):
+        await asyncio.sleep(gemini_delay)
+        target = kwargs["open_tasks"][0]
+        return Decision(
+            transcript="완료했어", action="complete_task", args=DecisionArgs(item_id=target.item_id)
+        )
+
+    monkeypatch.setattr(voice.tasks.ai, "analyze", analyze)
+    return client.post("/api/text", json={"text": "완료했어"}, headers={"x-device-token": "secret"})
+
+
+def test_write_gets_its_own_time_after_slow_gemini(monkeypatch, tmp_path):
+    # Gemini가 쓰기 전 제한(0.5초)을 거의 다 써도 쓰기는 따로 0.3초를 받는다.
+    res = _complete_first_task(EurekaMock, monkeypatch, tmp_path, gemini_delay=0.4, write_delay=0.15)
+    assert res.json()["status"] == "OK"
+    assert res.json()["type"] == "task_completed"
+
+
+def test_slow_write_times_out(monkeypatch, tmp_path):
+    res = _complete_first_task(EurekaMock, monkeypatch, tmp_path, gemini_delay=0, write_delay=1.0)
+    assert res.json()["status"] == "ERROR"
