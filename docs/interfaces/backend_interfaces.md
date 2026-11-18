@@ -69,6 +69,6 @@
 
 목록은 요청마다 읽지 않고 `services/task_cache.py`가 캐시한다. 서버 시작 시와 하루 1회 읽고, 쓰기 성공 시 캐시를 바로 고친 뒤 약 10초 뒤 다시 읽는다. 쓰기 실패 시 즉시 다시 읽고, 다시 읽기가 실패하면 기존 캐시를 쓴다. 규칙은 `contracts.md` § 4다. 실연동 클라이언트의 단건 상태 조회는 미구현이다.
 
-## 삭제 예정: WebSocket
+## 이전 설계: WebSocket (Pi 전환 후 삭제)
 
-`/ws/hardware/{user_id}`에 `X-Device-Token`을 전달한다. 토큰 오류 시 1008로 닫는다. 연결 시 `{"event":"connected","user_id":"…"}`, 텍스트 `PING`에는 `{"event":"PONG"}`을 반환한다. Pi 자체 알람으로 바뀌어 쓰지 않으며, 이전 알림 코드와 함께 삭제한다.
+`/ws/hardware/{user_id}`에 `X-Device-Token`을 전달한다. 토큰 오류 시 1008로 닫는다. 연결 시 `{"event":"connected","user_id":"…"}`, 텍스트 `PING`에는 `{"event":"PONG"}`을 반환한다. 알림 전송 코드는 삭제했다. Hardware 앱이 아직 연결하므로 Pi가 `GET /api/tasks`로 바꾼 뒤 엔드포인트도 삭제한다.

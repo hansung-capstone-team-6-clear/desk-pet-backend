@@ -17,15 +17,6 @@ CREATE TABLE IF NOT EXISTS reminders (
   offset_min INTEGER NOT NULL DEFAULT 60
 );
 
-CREATE TABLE IF NOT EXISTS alerts (
-  item_id TEXT NOT NULL,
-  due_at INTEGER NOT NULL,      -- epoch ms, Eureka 값 그대로
-  offset_min INTEGER NOT NULL,
-  status TEXT NOT NULL,         -- sent | undelivered
-  sent_at INTEGER,
-  PRIMARY KEY (item_id, due_at, offset_min)
-);
-
 CREATE TABLE IF NOT EXISTS pending (
   user_id TEXT PRIMARY KEY,
   payload TEXT NOT NULL,        -- 재질문 전 원래 요청 (JSON)

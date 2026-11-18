@@ -163,11 +163,6 @@ class EurekaClient:
         if str(data.get("id")) != item_id:
             raise EurekaError("Eureka 삭제 응답의 id가 일치하지 않습니다")
 
-    async def get_status(self, item_id: str) -> str:
-        """GET /_api_/items/{item_id}/status → status (todo | doing | done | hold)"""
-        # TODO(backend, 11/14)
-        raise NotImplementedError
-
 
 class EurekaMock:
     """메모리에만 있는 가짜 Eureka. 실제 키 없이 /api/text 흐름과 알림을 개발할 때 쓴다. 재시작하면 사라진다."""
@@ -193,9 +188,6 @@ class EurekaMock:
     async def delete_task(self, item_id: str) -> None:
         self._get(item_id)
         del self.tasks[item_id]
-
-    async def get_status(self, item_id: str) -> str:
-        return self._get(item_id).status
 
     def _get(self, item_id: str) -> Task:
         if item_id not in self.tasks:
