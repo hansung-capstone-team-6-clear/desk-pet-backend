@@ -40,6 +40,7 @@ api/voice.py → services/tasks.py handle()
 api/tasks.py → services/tasks.py list_device_tasks()
                  ├─ services/task_cache.py get_open_tasks()  미완료 업무 목록 (캐시)
                  └─ db.py       get_reminders()      업무별 알림 오프셋
+                                get_disabled_reminders()  알림을 끈 업무 (reminder_enabled false)
 ```
 
 마감 알람은 Pi가 이 목록으로 스스로 울린다. 캐시는 서버 시작 시 `main.py`가 `task_cache.run_forever()`로 띄운다. 이전 설계의 선제 알림 코드(`services/reminder.py`, `api/ws.py`의 알림 전송, `alerts` 테이블)는 삭제했다.
