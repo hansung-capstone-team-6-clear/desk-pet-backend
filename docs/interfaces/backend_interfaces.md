@@ -30,12 +30,12 @@
 
 ### `GET /api/tasks`
 
-미완료 업무를 마감순으로 돌려준다. Pi는 이 목록으로 스스로 마감 알람을 울리고, 중복 알림 방지와 보낸 알람 기록도 Pi가 맡는다. 언제 울릴지는 Pi가 판단하므로 마감이 지난 업무도 거르지 않는다. `offset_minutes`는 등록 때 저장한 값이고, 없으면 `DEFAULT_REMINDER_MINUTES`(60)다.
+미완료 업무를 마감순으로 돌려준다. Pi는 이 목록으로 스스로 마감 알람을 울리고, 중복 알림 방지와 보낸 알람 기록도 Pi가 맡는다. 언제 울릴지는 Pi가 판단하므로 마감이 지난 업무도 거르지 않는다. `offset_minutes`는 등록 때 저장한 값이고, 없으면 `DEFAULT_REMINDER_MINUTES`(60)다. `reminder_enabled`가 `false`면 사용자가 알림을 끈 업무다. 목록에서 빼지 않으며, Pi는 이 업무의 알람을 울리지 않는다.
 
 ```json
 {
   "tasks": [
-    { "item_id": "1000066", "name": "보고서 작성", "due_at": "2026-11-12T15:00:00+09:00", "offset_minutes": 60 }
+    { "item_id": "1000066", "name": "보고서 작성", "due_at": "2026-11-12T15:00:00+09:00", "offset_minutes": 60, "reminder_enabled": true }
   ]
 }
 ```
@@ -51,7 +51,7 @@
 | `ai.py → tasks.py` | `Decision`의 `transcript`, `action`, `args`, 선택 `question` |
 | `tasks.py → db.py` | 재질문은 `user_id`별 `Decision` JSON을 60초 보관한다. 등록 시 `item_id`와 알림 오프셋을 저장하고, 삭제 시 지운다. |
 
-`args`의 선택 필드는 `name`, `due_at`, `offset_minutes`, `item_id`, `range`, `candidates`다. `range`는 `today`·`tomorrow`·`week`·`all`이다. 실행하는 action은 `create_task`·`list_tasks`·`complete_task`·`update_due`·`delete_task`·`clarify`다. `set_reminder`는 후보에 있으나 요청 처리에서 미지원이다.
+`args`의 선택 필드는 `name`, `due_at`, `offset_minutes`, `reminder_enabled`, `item_id`, `date_from`, `date_to`, `candidates`, `confirm`이다. `date_from`·`date_to`는 `list_tasks`의 마감 날짜 범위(YYYY-MM-DD, KST, 양 끝 포함)이며 AI가 계산한다. 둘 다 없으면 전체다. 실행하는 action은 `create_task`·`list_tasks`·`complete_task`·`update_due`·`delete_task`·`clarify`다. `set_reminder`는 후보에 있으나 요청 처리에서 미지원이다.
 
 `delete_task`는 바로 지우지 않고 확인 질문을 한다. 60초 안에 긍정 답(예: "응", "삭제해")이 오면 지우고, 부정 답이 오면 취소한다. 답 판정은 백엔드가 정해진 목록과 정확히 일치하는지로 한다. AI 프롬프트가 아직 `delete_task`를 내보내지 않아 실제 음성으로는 동작하지 않는다 (`contracts.md` § 3).
 

@@ -52,10 +52,37 @@ def test_returns_contract_fields_with_saved_or_default_offset(eureka):
     assert response.status_code == 200
     assert response.json() == {"tasks": [
         {"item_id": saved.item_id, "name": "보고서 검토",
-         "due_at": "2030-11-20T17:00:00+09:00", "offset_minutes": 120},
+         "due_at": "2030-11-20T17:00:00+09:00", "offset_minutes": 120, "reminder_enabled": True},
         {"item_id": default.item_id, "name": "회의 준비",
-         "due_at": "2030-11-21T17:00:00+09:00", "offset_minutes": 60},
+         "due_at": "2030-11-21T17:00:00+09:00", "offset_minutes": 60, "reminder_enabled": True},
     ]}
+
+
+def test_disabled_reminder_stays_in_list_with_flag_and_offset(eureka):
+    due = datetime(2030, 11, 20, 17, tzinfo=KST)
+    task = create(eureka, "보고서 검토", due)
+    db.set_reminder(task.item_id, 120)
+    db.set_reminder_enabled(task.item_id, False, 60)
+
+    [item] = client.get("/api/tasks", headers=HEADERS).json()["tasks"]
+
+    assert item["reminder_enabled"] is False
+    assert item["offset_minutes"] == 120
+
+
+def test_old_db_gets_enabled_column_and_keeps_rows(eureka):
+    """enabled 열이 없던 DB 파일도 열 때 열이 더해지고, 기존 업무는 켜진 상태가 된다."""
+    import sqlite3
+
+    with sqlite3.connect(settings.db_path) as conn:
+        conn.execute("CREATE TABLE reminders (item_id TEXT PRIMARY KEY, offset_min INTEGER NOT NULL DEFAULT 60)")
+        conn.execute("INSERT INTO reminders VALUES ('old-1', 90)")
+
+    assert db.get_reminders() == {"old-1": 90}
+    assert db.get_disabled_reminders() == set()
+    with db.connect() as conn:
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(reminders)")}
+    assert "enabled" in columns
 
 
 def test_sorted_by_due_excludes_done_and_keeps_past_due(eureka):

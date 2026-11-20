@@ -14,7 +14,8 @@ from desk_pet_backend.config import settings
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS reminders (
   item_id TEXT PRIMARY KEY,
-  offset_min INTEGER NOT NULL DEFAULT 60
+  offset_min INTEGER NOT NULL DEFAULT 60,
+  enabled INTEGER NOT NULL DEFAULT 1   -- 0이면 알림 끔. 꺼도 offset_min은 남겨 다시 켤 때 쓴다
 );
 
 CREATE TABLE IF NOT EXISTS pending (
@@ -32,17 +33,41 @@ def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    _add_missing_columns(conn)
     return conn
 
 
-def set_reminder(item_id: str, offset_minutes: int) -> None:
-    """Eureka에 등록된 업무의 알림 시점을 저장한다."""
+def _add_missing_columns(conn: sqlite3.Connection) -> None:
+    """enabled 열이 생기기 전에 만든 DB 파일에 열을 더한다. 기존 업무는 켜진 상태(1)가 된다."""
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(reminders)")}
+    if "enabled" not in columns:
+        conn.execute("ALTER TABLE reminders ADD COLUMN enabled INTEGER NOT NULL DEFAULT 1")
+        conn.commit()
+
+
+def set_reminder(item_id: str, offset_minutes: int, enabled: bool = True) -> None:
+    """Eureka에 등록된 업무의 알림 시점과 켜짐 여부를 저장한다."""
     with closing(connect()) as conn, conn:
         conn.execute(
-            "INSERT INTO reminders (item_id, offset_min) VALUES (?, ?) "
-            "ON CONFLICT(item_id) DO UPDATE SET offset_min = excluded.offset_min",
-            (item_id, offset_minutes),
+            "INSERT INTO reminders (item_id, offset_min, enabled) VALUES (?, ?, ?) "
+            "ON CONFLICT(item_id) DO UPDATE SET offset_min = excluded.offset_min, enabled = excluded.enabled",
+            (item_id, offset_minutes, int(enabled)),
         )
+
+
+def set_reminder_enabled(item_id: str, enabled: bool, default_offset_minutes: int) -> int:
+    """알림 켜짐 여부만 바꾸고 저장된 알림 시점(분)을 돌려준다.
+
+    저장된 줄이 없으면 default_offset_minutes로 만든다. 끌 때도 알림 시점은 지우지 않는다.
+    """
+    with closing(connect()) as conn, conn:
+        conn.execute(
+            "INSERT INTO reminders (item_id, offset_min, enabled) VALUES (?, ?, ?) "
+            "ON CONFLICT(item_id) DO UPDATE SET enabled = excluded.enabled",
+            (item_id, default_offset_minutes, int(enabled)),
+        )
+        row = conn.execute("SELECT offset_min FROM reminders WHERE item_id = ?", (item_id,)).fetchone()
+    return row["offset_min"]
 
 
 def get_reminders() -> dict[str, int]:
@@ -50,6 +75,13 @@ def get_reminders() -> dict[str, int]:
     with closing(connect()) as conn:
         rows = conn.execute("SELECT item_id, offset_min FROM reminders").fetchall()
     return {row["item_id"]: row["offset_min"] for row in rows}
+
+
+def get_disabled_reminders() -> set[str]:
+    """알림을 끈 업무의 item_id를 돌려준다."""
+    with closing(connect()) as conn:
+        rows = conn.execute("SELECT item_id FROM reminders WHERE enabled = 0").fetchall()
+    return {row["item_id"] for row in rows}
 
 
 def delete_reminder(item_id: str) -> None:
