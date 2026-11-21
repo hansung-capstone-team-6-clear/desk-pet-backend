@@ -78,11 +78,11 @@ docker compose up --build
 | 10/18 | `/api/text` 요청 처리 | `services/tasks.py`, `api/voice.py` | backend |
 | 10/31 | `/api/voice` 음성 요청 | `api/voice.py`, `services/tasks.py` | backend |
 
-이미 동작하는 것: `/health`, 토큰 확인, `/api/text`·`/api/voice`, 등록·조회·수정·완료·재질문, 확인 질문이 있는 삭제, `GET /api/tasks`, 업무 목록 캐시, `EurekaMock`, SQLite 테이블 생성, 시간 변환.
+이미 동작하는 것: `/health`, 토큰 확인, `/api/text`·`/api/voice`, 등록·조회·수정·완료·재질문, 확인 질문이 있는 삭제, 알림 간격 변경·켜기·끄기, 날짜 범위 조회, `GET /api/tasks`, 업무 목록 캐시, `EurekaMock`, SQLite 테이블 생성, 시간 변환.
 
 남은 2026-11-06 결정 (형식은 `contracts.md` § 1):
 
-- 시간 제한: 처리 7초 → Pi 10초 지연 안내·20초 실패에 맞춰 조정. Pi 변경과 함께 배포한다.
+- 시간 제한: Backend는 쓰기 전까지 15초 + Eureka 쓰기 3초로 바꿨다 (PR #39). Pi의 10초 지연 안내·20초 실패는 구현 전이다. Pi 변경과 함께 배포한다.
 
 ## 작업 규칙
 

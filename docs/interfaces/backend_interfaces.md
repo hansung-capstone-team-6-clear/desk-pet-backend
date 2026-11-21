@@ -26,7 +26,7 @@
 }
 ```
 
-`stt_text`와 `output.lcd`는 null일 수 있다. 구현된 응답은 `OK`와 `ERROR`, 결과 유형은 `task_created`·`task_list`·`task_completed`·`task_updated`·`task_deleted`·`task_delete_cancelled`·`clarification`·`error`다. `NO_SPEECH`·`STT_ERROR`, `reminder_set`은 스키마 정의 단계다. LED 매핑은 Pi가 담당한다.
+`stt_text`와 `output.lcd`는 null일 수 있다. 구현된 응답은 `OK`와 `ERROR`, 결과 유형은 `task_created`·`task_list`·`task_completed`·`task_updated`·`task_deleted`·`task_delete_cancelled`·`reminder_set`·`clarification`·`error`다. `NO_SPEECH`·`STT_ERROR`는 스키마 정의 단계다. LED 매핑은 Pi가 담당한다.
 
 ### `GET /api/tasks`
 
@@ -49,11 +49,11 @@
 | `tasks.py → task_cache.py` | 미완료 업무 목록 읽기. 쓰기 성공·실패를 알려 캐시를 고친다. |
 | `tasks.py → ai.py` | WAV 또는 텍스트, 현재 KST 시각, 미완료 업무 최대 30건, 유효한 `pending` |
 | `ai.py → tasks.py` | `Decision`의 `transcript`, `action`, `args`, 선택 `question` |
-| `tasks.py → db.py` | 재질문은 `user_id`별 `Decision` JSON을 60초 보관한다. 등록 시 `item_id`와 알림 오프셋을 저장하고, 삭제 시 지운다. |
+| `tasks.py → db.py` | 재질문은 `user_id`별 `Decision` JSON을 60초 보관한다. 등록·알림 변경 시 `item_id`별 알림 오프셋과 켜짐 여부(`enabled`)를 저장하고, 삭제 시 지운다. 알림을 꺼도 오프셋은 남겨 다시 켤 때 쓴다. |
 
-`args`의 선택 필드는 `name`, `due_at`, `offset_minutes`, `reminder_enabled`, `item_id`, `date_from`, `date_to`, `candidates`, `confirm`이다. `date_from`·`date_to`는 `list_tasks`의 마감 날짜 범위(YYYY-MM-DD, KST, 양 끝 포함)이며 AI가 계산한다. 둘 다 없으면 전체다. 실행하는 action은 `create_task`·`list_tasks`·`complete_task`·`update_due`·`delete_task`·`clarify`다. `set_reminder`는 후보에 있으나 요청 처리에서 미지원이다.
+`args`의 선택 필드는 `name`, `due_at`, `offset_minutes`, `reminder_enabled`, `item_id`, `date_from`, `date_to`, `candidates`, `confirm`이다. `date_from`·`date_to`는 `list_tasks`의 마감 날짜 범위(YYYY-MM-DD, KST, 양 끝 포함)이며 AI가 계산한다. 둘 다 없으면 전체다. `reminder_enabled`는 `create_task`·`set_reminder`에서 알림 켜기(`true`)·끄기(`false`)를 뜻한다. 실행하는 action은 `create_task`·`list_tasks`·`complete_task`·`update_due`·`delete_task`·`set_reminder`·`clarify`다.
 
-`delete_task`는 바로 지우지 않고 확인 질문을 한다. 60초 안에 긍정 답(예: "응", "삭제해")이 오면 지우고, 부정 답이 오면 취소한다. 답 판정은 백엔드가 정해진 목록과 정확히 일치하는지로 한다. AI 프롬프트가 아직 `delete_task`를 내보내지 않아 실제 음성으로는 동작하지 않는다 (`contracts.md` § 3).
+`delete_task`는 바로 지우지 않고 확인 질문을 한다. 60초 안에 온 답의 동의 여부는 AI가 `confirm`(`yes`·`no`·`null`)으로 판단하고, 백엔드는 그 답이 같은 업무에 대한 것인지만 확인한다. `yes`면 지우고, `no`면 취소하고, `null`이면 다시 묻는다 (`contracts.md` § 3).
 
 ## Backend → Eureka
 
