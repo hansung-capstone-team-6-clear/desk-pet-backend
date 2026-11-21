@@ -27,6 +27,39 @@ def set_decision(monkeypatch, decision):
     monkeypatch.setattr(tasks.ai, "analyze", analyze)
 
 
+@pytest.mark.parametrize("pending_action", [None, "clarify", "delete_task"])
+async def test_unsupported_guides_without_mutation_and_clears_pending(
+    mock_flow, monkeypatch, pending_action
+):
+    task = await mock_flow.create_task("보고서", datetime.now(KST) + timedelta(days=1))
+    db.set_reminder(task.item_id, 120, False)
+    if pending_action is not None:
+        pending = Decision(
+            transcript="보고서", action=pending_action,
+            args=DecisionArgs(item_id=task.item_id), question="삭제할까요?",
+        ).model_dump(mode="json")
+        if pending_action == "delete_task":
+            pending["delete_item_id"] = task.item_id
+        db.set_pending("pet-01", pending)
+    before = (await mock_flow.list_open_tasks())[0].model_dump()
+    set_decision(monkeypatch, Decision(
+        transcript="오늘 날씨 어때?", action="unsupported", args=DecisionArgs(),
+    ))
+
+    response = await tasks.handle(user_id="pet-01", request_id="req-unsupported", text="오늘 날씨 어때?")
+
+    assert response.status == "OK"
+    assert response.type == "clarification"
+    assert response.request_id == "req-unsupported"
+    assert response.stt_text == "오늘 날씨 어때?"
+    assert response.output.tts == "업무 등록, 조회, 완료, 마감 변경, 삭제와 업무 알림 설정을 도와드릴 수 있어요."
+    assert response.output.lcd.expression == "speaking"
+    assert db.get_pending("pet-01") is None
+    assert (await mock_flow.list_open_tasks())[0].model_dump() == before
+    assert db.get_reminders() == {task.item_id: 120}
+    assert db.get_disabled_reminders() == {task.item_id}
+
+
 async def test_create_saves_reminder_and_returns_success_only_after_eureka(mock_flow, monkeypatch):
     due = datetime.now(KST) + timedelta(days=1)
     set_decision(monkeypatch, Decision(

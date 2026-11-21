@@ -55,6 +55,8 @@
 
 `delete_task`는 바로 지우지 않고 확인 질문을 한다. 60초 안에 온 답의 동의 여부는 AI가 `confirm`(`yes`·`no`·`null`)으로 판단하고, 백엔드는 그 답이 같은 업무에 대한 것인지만 확인한다. `yes`면 지우고, `no`면 취소하고, `null`이면 다시 묻는다 (`contracts.md` § 3).
 
+`unsupported`는 업무 관리와 관계없는 발화에 대한 AI 판단이다. Backend는 `status: OK`, `type: clarification`과 고정된 업무 기능 안내를 반환하고 `stt_text`는 유지한다. 새 재질문 대기를 저장하지 않으며, 기존 재질문·삭제 확인 대기는 해제한다. 업무와 알림 설정은 변경하지 않는다. `clarification`은 재질문뿐 아니라 이 기능 안내에도 사용한다.
+
 ## Backend → Eureka
 
 실연동은 `x-api-key`를 사용한다. 업무 데이터는 `item_id`·`name`·`due_at`·`status`로 정규화하며, `dueAt`은 Eureka의 epoch 밀리초 값이다.

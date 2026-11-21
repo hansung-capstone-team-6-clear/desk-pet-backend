@@ -139,6 +139,19 @@ async def _handle(
     def remember_and_clarify(asked: Decision, question: str) -> VoiceResponse:
         return _remember_and_clarify(user_id, request_id, asked, question)
 
+    if decision.action == "unsupported":
+        _clear_pending_after_success(user_id, pending)
+        return VoiceResponse(
+            request_id=request_id,
+            status="OK",
+            stt_text=decision.transcript,
+            type="clarification",
+            output=Output(
+                tts="업무 등록, 조회, 완료, 마감 변경, 삭제와 업무 알림 설정을 도와드릴 수 있어요.",
+                lcd=Lcd(expression="speaking", text="업무 기능 안내"),
+            ),
+        )
+
     if delete_item_id is not None:
         # 삭제 확인 질문에 대한 답. 동의 여부는 AI가 confirm으로 판단하고, Backend는 그 답이
         # 확인 질문의 대상 업무에 대한 것인지만 검사한다. 다른 업무·다른 요청이면 삭제를 취소하고 새 요청으로 처리한다.
