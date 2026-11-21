@@ -1,7 +1,7 @@
 """AI 판단 뒤 등록·조회 정책과 응답을 검증한다. 실제 Eureka는 호출하지 않는다."""
 
 import sqlite3
-from datetime import datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 import pytest
 
@@ -89,13 +89,14 @@ async def test_list_filters_by_kst_date_and_hides_done(mock_flow, monkeypatch):
     done = await mock_flow.create_task("종료된 보고서", datetime.combine(today, time(16), KST))
     await mock_flow.complete_task(done.item_id)
     set_decision(monkeypatch, Decision(
-        transcript="오늘 할 일", action="list_tasks", args=DecisionArgs(range="today"),
+        transcript="오늘 할 일", action="list_tasks", args=DecisionArgs(date_from=today, date_to=today),
     ))
 
     response = await tasks.handle(user_id="pet-01", request_id="req-4", text="오늘 할 일")
 
     assert response.status == "OK"
     assert response.type == "task_list"
+    assert response.output.tts.startswith(f"{today.month}월 {today.day}일 미완료 업무 1개가 있어요.")
     assert "오늘 업무" in response.output.tts
     assert "내일 업무" not in response.output.tts
     assert "종료된 보고서" not in response.output.tts
@@ -103,20 +104,49 @@ async def test_list_filters_by_kst_date_and_hides_done(mock_flow, monkeypatch):
     assert today_task.item_id in mock_flow.tasks
 
 
-@pytest.mark.parametrize("range_name, expected", [
-    ("today", ["today"]), ("tomorrow", ["tomorrow"]),
-    ("week", ["today", "tomorrow"]), ("all", ["today", "tomorrow", "next_week"]),
+@pytest.mark.parametrize("date_from, date_to, expected", [
+    (date(2026, 10, 28), date(2026, 10, 28), ["today"]),
+    (date(2026, 10, 29), date(2026, 10, 29), ["tomorrow"]),
+    (date(2026, 10, 28), date(2026, 11, 1), ["today", "tomorrow"]),
+    (date(2026, 11, 2), date(2026, 11, 8), ["next_week"]),
+    (None, date(2026, 10, 29), ["today", "tomorrow"]),
+    (date(2026, 10, 29), None, ["tomorrow", "next_week"]),
+    (None, None, ["today", "tomorrow", "next_week"]),
 ])
-def test_date_ranges_use_korean_week(range_name, expected):
+def test_filter_uses_inclusive_kst_dates(date_from, date_to, expected):
     now = datetime(2026, 10, 28, 12, tzinfo=KST)  # 수요일
-    from desk_pet_backend.schemas import Task
-
     items = [
         Task(item_id="1", name="today", due_at=datetime(2026, 10, 28, 15, tzinfo=KST), status="todo"),
-        Task(item_id="2", name="tomorrow", due_at=datetime(2026, 10, 29, 15, tzinfo=KST), status="todo"),
+        # UTC로는 10/29 14:59지만 KST로는 10/29 23:59 → 내일
+        Task(item_id="2", name="tomorrow", due_at=datetime(2026, 10, 29, 14, 59, tzinfo=UTC), status="todo"),
         Task(item_id="3", name="next_week", due_at=datetime(2026, 11, 2, 15, tzinfo=KST), status="todo"),
     ]
-    assert [task.name for task in tasks._filter_tasks(items, range_name, now)] == expected
+    assert [task.name for task in tasks._filter_tasks(items, date_from, date_to, now)] == expected
+
+
+def test_reversed_date_range_is_swapped():
+    assert tasks._date_range(date(2026, 11, 22), date(2026, 11, 19)) == (date(2026, 11, 19), date(2026, 11, 22))
+    assert tasks._date_range(None, date(2026, 11, 19)) == (None, date(2026, 11, 19))
+
+
+@pytest.mark.parametrize("date_from, date_to, period", [
+    (date(2026, 11, 21), date(2026, 11, 21), "11월 21일"),
+    (date(2026, 11, 19), date(2026, 11, 22), "11월 19일부터 11월 22일까지"),
+    (None, date(2026, 11, 20), "11월 20일까지"),
+    (date(2026, 11, 23), None, "11월 23일부터"),
+    (None, None, ""),
+])
+def test_format_period(date_from, date_to, period):
+    assert tasks._format_period(date_from, date_to) == period
+
+
+async def test_empty_list_reads_period(mock_flow, monkeypatch):
+    set_decision(monkeypatch, Decision(
+        transcript="모레 뭐 있어", action="list_tasks",
+        args=DecisionArgs(date_from=date(2099, 1, 2), date_to=date(2099, 1, 2)),
+    ))
+    response = await tasks.handle(user_id="pet-01", request_id="req-70", text="모레 뭐 있어")
+    assert response.output.tts == "1월 2일 미완료 업무가 없어요."
 
 
 async def test_eureka_failure_does_not_claim_create_success(mock_flow, monkeypatch):
@@ -308,15 +338,20 @@ def create_decision(transcript, name, due_at=None):
     )
 
 
-@pytest.mark.parametrize("range_name", ["today", "week", "all"])
-async def test_list_does_not_read_past_due_tasks(mock_flow, monkeypatch, range_name):
+@pytest.mark.parametrize("from_days, to_days", [(0, 0), (-1, 6), (None, None)])
+async def test_list_does_not_read_past_due_tasks(mock_flow, monkeypatch, from_days, to_days):
     today = datetime.now(KST).date()
+
+    def shift(days):
+        return None if days is None else today + timedelta(days=days)
+
     freeze_now(monkeypatch, datetime.combine(today, time(12), KST))
     await mock_flow.create_task("지난 업무", datetime.combine(today, time(9), KST))
     await mock_flow.create_task("어제 업무", datetime.combine(today - timedelta(days=1), time(9), KST))
     await mock_flow.create_task("남은 업무", datetime.combine(today, time(15), KST))
     set_decision(monkeypatch, Decision(
-        transcript="업무 알려줘", action="list_tasks", args=DecisionArgs(range=range_name),
+        transcript="업무 알려줘", action="list_tasks",
+        args=DecisionArgs(date_from=shift(from_days), date_to=shift(to_days)),
     ))
 
     response = await tasks.handle(user_id="pet-01", request_id="req-65", text="업무 알려줘")
@@ -342,7 +377,7 @@ async def test_list_reads_nearest_due_first_even_when_truncated(mock_flow, monke
     for offset in [6, 2, 5, 1, 4, 3]:
         await mock_flow.create_task(f"업무{offset}", base + timedelta(days=offset))
     set_decision(monkeypatch, Decision(
-        transcript="전체 업무", action="list_tasks", args=DecisionArgs(range="all"),
+        transcript="전체 업무", action="list_tasks", args=DecisionArgs(),
     ))
 
     response = await tasks.handle(user_id="pet-01", request_id="req-62", text="전체 업무")
@@ -476,7 +511,7 @@ async def test_echoed_transcript_on_voice_does_not_delete(mock_flow, monkeypatch
 async def test_other_request_cancels_pending_delete(mock_flow, monkeypatch):
     task, _ = await ask_to_delete(mock_flow, monkeypatch)
     set_decision(monkeypatch, Decision(
-        transcript="오늘 할 일", action="list_tasks", args=DecisionArgs(range="today"),
+        transcript="오늘 할 일", action="list_tasks", args=DecisionArgs(),
     ))
     response = await tasks.handle(user_id="pet-01", request_id="req-45", text="오늘 할 일")
     assert response.type == "task_list"
@@ -571,7 +606,10 @@ CHECK_TASKS = [Task(item_id="t1", name="보고서 검토", due_at=CHECK_NOW + ti
             tasks.Blocked("bad_offset"),
         ),
         ("create_task", {"name": "보고서", "due_at": CHECK_NOW + timedelta(days=1), "offset_minutes": 30}, None),
-        ("list_tasks", {"range": "all"}, None),
+        ("list_tasks", {}, None),
+        ("set_reminder", {"item_id": "t1", "reminder_enabled": False}, None),
+        ("set_reminder", {"item_id": "t1", "reminder_enabled": True}, None),
+        ("set_reminder", {"item_id": "t1"}, tasks.Blocked("missing", ("offset_minutes",))),
     ],
 )
 def test_check_decision_reports_only_execution_preconditions(action, args, blocked):
@@ -607,6 +645,82 @@ async def test_set_reminder_saves_offset_for_pi(mock_flow, monkeypatch):
     assert db.get_reminders()[task.item_id] == 30
     device_tasks = await tasks.list_device_tasks()
     assert [t.offset_minutes for t in device_tasks.tasks] == [30]
+
+
+def reminder_decision(transcript, item_id, **args):
+    return Decision(transcript=transcript, action="set_reminder", args=DecisionArgs(item_id=item_id, **args))
+
+
+async def test_reminder_off_keeps_offset_and_flags_pi(mock_flow, monkeypatch):
+    task = await mock_flow.create_task("보고서 검토", datetime.now(KST) + timedelta(days=1))
+    db.set_reminder(task.item_id, 120)
+    set_decision(monkeypatch, reminder_decision("보고서 검토 알림 꺼줘", task.item_id, reminder_enabled=False))
+
+    response = await tasks.handle(user_id="pet-01", request_id="req-80", text="보고서 검토 알림 꺼줘")
+
+    assert response.type == "reminder_set"
+    assert response.output.tts == "보고서 검토 업무 알림을 껐어요."
+    assert response.output.lcd.text == "알림 끔"
+    assert db.get_reminders()[task.item_id] == 120
+    [device_task] = (await tasks.list_device_tasks()).tasks
+    assert device_task.reminder_enabled is False
+    assert device_task.offset_minutes == 120
+
+
+async def test_reminder_on_restores_saved_offset(mock_flow, monkeypatch):
+    task = await mock_flow.create_task("보고서 검토", datetime.now(KST) + timedelta(days=1))
+    db.set_reminder(task.item_id, 120)
+    db.set_reminder_enabled(task.item_id, False, 60)
+    set_decision(monkeypatch, reminder_decision("보고서 검토 알림 다시 켜줘", task.item_id, reminder_enabled=True))
+
+    response = await tasks.handle(user_id="pet-01", request_id="req-81", text="보고서 검토 알림 다시 켜줘")
+
+    assert response.output.tts == "보고서 검토 업무 알림을 다시 켰어요. 마감 2시간 전에 알려 드려요."
+    assert response.output.lcd.text == "알림 켬"
+    [device_task] = (await tasks.list_device_tasks()).tasks
+    assert device_task.reminder_enabled is True
+    assert device_task.offset_minutes == 120
+
+
+async def test_reminder_on_without_saved_row_uses_default(mock_flow, monkeypatch):
+    monkeypatch.setattr(settings, "default_reminder_minutes", 60)
+    task = await mock_flow.create_task("보고서 검토", datetime.now(KST) + timedelta(days=1))
+    set_decision(monkeypatch, reminder_decision("알림 켜줘", task.item_id, reminder_enabled=True))
+
+    response = await tasks.handle(user_id="pet-01", request_id="req-82", text="알림 켜줘")
+
+    assert response.output.tts == "보고서 검토 업무 알림을 다시 켰어요. 마감 1시간 전에 알려 드려요."
+    assert db.get_reminders()[task.item_id] == 60
+
+
+async def test_changing_offset_turns_reminder_back_on(mock_flow, monkeypatch):
+    task = await mock_flow.create_task("보고서 검토", datetime.now(KST) + timedelta(days=1))
+    db.set_reminder(task.item_id, 120)
+    db.set_reminder_enabled(task.item_id, False, 60)
+    set_decision(monkeypatch, reminder_decision("알림 30분 전으로 바꿔줘", task.item_id, offset_minutes=30))
+
+    response = await tasks.handle(user_id="pet-01", request_id="req-83", text="알림 30분 전으로 바꿔줘")
+
+    assert response.output.tts == "보고서 검토 업무 알림을 마감 30분 전으로 바꿨어요."
+    [device_task] = (await tasks.list_device_tasks()).tasks
+    assert device_task.reminder_enabled is True
+    assert device_task.offset_minutes == 30
+
+
+async def test_create_without_reminder(mock_flow, monkeypatch):
+    monkeypatch.setattr(settings, "default_reminder_minutes", 60)
+    set_decision(monkeypatch, Decision(
+        transcript="알림 없이 회의 등록해줘", action="create_task",
+        args=DecisionArgs(name="회의", due_at=datetime.now(KST) + timedelta(days=1), reminder_enabled=False),
+    ))
+
+    response = await tasks.handle(user_id="pet-01", request_id="req-84", text="알림 없이 회의 등록해줘")
+
+    assert response.type == "task_created"
+    assert response.output.tts.endswith("알림은 꺼 두었어요.")
+    [device_task] = (await tasks.list_device_tasks()).tasks
+    assert device_task.reminder_enabled is False
+    assert device_task.offset_minutes == 60
 
 
 @pytest.mark.parametrize(("args", "question"), [

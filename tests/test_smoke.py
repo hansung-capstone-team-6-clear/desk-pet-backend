@@ -82,7 +82,7 @@ def test_voice_passes_valid_wav_to_ai_and_returns_contract_response(monkeypatch,
         return Decision(
             transcript="오늘 할 일 알려줘",
             action="list_tasks",
-            args=DecisionArgs(range="today"),
+            args=DecisionArgs(),
         )
 
     monkeypatch.setattr(voice.tasks.ai, "analyze", fake_analyze)
@@ -111,7 +111,7 @@ def test_voice_returns_request_id_sent_by_pi(monkeypatch, tmp_path):
         return Decision(
             transcript="오늘 할 일 알려줘",
             action="list_tasks",
-            args=DecisionArgs(range="today"),
+            args=DecisionArgs(),
         )
 
     monkeypatch.setattr(voice.tasks.ai, "analyze", fake_analyze)
@@ -134,7 +134,7 @@ def test_voice_logs_step_timings(monkeypatch, tmp_path, caplog):
         return Decision(
             transcript="비밀 문장",
             action="list_tasks",
-            args=DecisionArgs(range="today"),
+            args=DecisionArgs(),
         )
 
     monkeypatch.setattr(voice.tasks.ai, "analyze", fake_analyze)

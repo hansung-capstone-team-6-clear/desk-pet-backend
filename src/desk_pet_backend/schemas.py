@@ -4,7 +4,7 @@
 필드 이름은 MVP Mock Server와 같은 snake_case다 (2026-10-07 하드웨어 결정).
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel
@@ -63,6 +63,7 @@ class DeviceTask(BaseModel):
     name: str
     due_at: datetime
     offset_minutes: int
+    reminder_enabled: bool  # false면 Pi는 이 업무의 알림을 울리지 않는다
 
 
 class DeviceTaskList(BaseModel):
@@ -96,8 +97,11 @@ class DecisionArgs(BaseModel):
     name: str | None = None
     due_at: datetime | None = None
     offset_minutes: int | None = None
+    reminder_enabled: bool | None = None  # 알림 켜기(true)·끄기(false). None이면 말하지 않음 (create_task·set_reminder)
     item_id: str | None = None
-    range: Literal["today", "tomorrow", "week", "all"] | None = None
+    # list_tasks 조회 범위. KST 날짜, 양 끝 포함. AI가 now·calendar를 보고 계산한다. 둘 다 없으면 전체.
+    date_from: date | None = None
+    date_to: date | None = None
     candidates: list[str] | None = None
     confirm: Literal["yes", "no"] | None = None  # 삭제 확인 질문에 대한 답 (AI 판단)
 
