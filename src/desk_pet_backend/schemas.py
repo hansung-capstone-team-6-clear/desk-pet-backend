@@ -90,6 +90,7 @@ Action = Literal[
     "delete_task",
     "set_reminder",
     "clarify",
+    "unsupported",  # 업무 관리와 관계없는 말. 안내 문장은 Backend 템플릿 (tasks.py 처리는 Backend 담당)
 ]
 
 

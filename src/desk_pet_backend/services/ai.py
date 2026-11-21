@@ -7,7 +7,7 @@
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from google import genai
 from google.genai import errors, types
@@ -35,14 +35,24 @@ SYSTEM_PROMPT = """
 - args에는 해당 action이 쓰는 키만 넣는다. 나머지 키는 생략한다. 단, clarify는 지금까지 확정된 name·due_at·offset_minutes도 함께 넣는다.
 
 [action과 args]
-1. create_task: name, due_at, offset_minutes
-2. list_tasks: range — "today" | "tomorrow" | "week" | "all" 중 하나 ("이번 주" → "week", 기간 언급 없음 → "all")
+1. create_task: name, due_at, offset_minutes, reminder_enabled
+2. list_tasks: date_from, date_to — 조회할 마감 날짜 범위 "YYYY-MM-DD" (양 끝 포함). now와 this_week를 보고 계산한다.
+   "오늘" → 둘 다 오늘, "내일" → 둘 다 내일, "이번 주" → this_week의 월요일~일요일, "다음 주" → 그다음 월요일~일요일.
+   기간을 말하지 않으면 둘 다 넣지 않는다 (전체 조회).
 3. complete_task: item_id
 4. update_due: item_id, due_at (마감 변경·연기·당기기)
-5. set_reminder: item_id, offset_minutes (알림 설정·변경)
+5. set_reminder: item_id, offset_minutes, reminder_enabled (알림 설정·변경·끄기·켜기)
+   - 알림을 끄거나 없애 달라면 reminder_enabled false, 다시 켜 달라면 true. 이때 offset_minutes는 말했을 때만 넣는다.
+   - 알림 시점("30분 전")만 바꾸면 offset_minutes만 넣는다.
+   - create_task에서도 "알림 없이", "알림은 필요 없어"라고 하면 reminder_enabled false. 말하지 않으면 넣지 않는다.
 6. delete_task: item_id, confirm (업무 삭제·지우기·없애기. 실제 삭제 전에 Backend가 확인 질문을 한다.
    confirm은 확인 질문에 답할 때만 "yes" | "no" | null로 쓰고, 처음 삭제를 요청할 때는 넣지 않는다)
 7. clarify: candidates (후보 item_id 배열, 선택) + question 필수 (사용자에게 되물을 짧은 한국어 문장)
+8. unsupported: args 없음 — 업무 관리(등록·조회·완료·마감 변경·삭제·알림)와 관계없는 말. 안내 문장은 Backend가 만든다.
+   - 잡담·추천·날씨·검색·인사·감사 ("저녁메뉴 추천해줘", "오늘 날씨 어때?", "심심해", "고마워")
+   - 특정 업무를 가리키지 않는 타이머·시간 알림 ("5분 후에 알려줘", "10분 뒤에 깨워줘")
+   - 업무 관리를 뜻하지만 대상이나 정보가 빠진 말은 unsupported가 아니라 clarify다.
+     open_tasks가 비어 있어도 마찬가지다 ("그거 수정해줘", "하나 추가해줘", "그거 지워줘" → clarify).
 
 [규칙]
 - due_at은 +09:00이 붙은 ISO 8601 (예: 2026-10-09T15:00:00+09:00). now를 기준으로 계산한다. 시각 없이 날짜만 말하면 23:59.
@@ -63,7 +73,7 @@ SYSTEM_PROMPT = """
 - item_id는 반드시 open_tasks에 있는 값만 쓴다. 대상 업무가 없거나 여러 개와 맞으면 clarify (여러 개면 candidates에 넣는다).
 - 알림 시점을 말하지 않았으면 offset_minutes는 null.
 - offset_minutes는 마감 몇 분 전에 알릴지다 ("2시간 전" → 120).
-- clarify가 아니면 question은 null.
+- clarify가 아니면 question은 null. unsupported일 때도 question은 null이고, 기능 밖 질문에 직접 답하지 않는다.
 - pending이 있으면 사용자가 직전 재질문에 답하는 중이다. pending의 원래 요청과 이번 답을 합쳐 최종 action을 정한다.
   - pending.transcript와 pending.question으로 원래 하려던 일(등록, 완료 등)을 파악하고 그 일을 바꾸지 않는다. 완료하려던 요청이 마감 변경이 되면 안 된다.
   - 이번 답에 pending.question이 물은 정보(업무, 날짜 등)가 없으면 추측해서 실행하지 말고 같은 질문을 다시 clarify한다.
@@ -81,8 +91,17 @@ def _format_now(now: datetime) -> str:
     return f"{now.isoformat(timespec='minutes')} ({WEEKDAYS[now.weekday()]}요일)"
 
 
+def _format_this_week(now: datetime) -> str:
+    """이번 주 월요일~일요일 날짜. AI가 "이번 주"·"다음 주"를 직접 세지 않게 코드가 계산해 준다."""
+    monday = now.date() - timedelta(days=now.weekday())
+    return f"{monday.isoformat()}(월) ~ {(monday + timedelta(days=6)).isoformat()}(일)"
+
+
 def _build_context(now: datetime, open_tasks: list[Task], pending: dict | None) -> str:
-    """맥락을 프롬프트 텍스트로 만든다. 형식: now(요일 포함) / open_tasks JSON / pending JSON(있을 때만)."""
+    """맥락을 프롬프트 텍스트로 만든다.
+
+    형식: now(요일 포함) / this_week(월~일 날짜) / open_tasks JSON / pending JSON(있을 때만).
+    """
     tasks = [
         {
             "item_id": t.item_id,
@@ -95,6 +114,7 @@ def _build_context(now: datetime, open_tasks: list[Task], pending: dict | None) 
     lines = [
         "[맥락]",
         f"now: {_format_now(now)}",
+        f"this_week: {_format_this_week(now)}",
         f"open_tasks: {json.dumps(tasks, ensure_ascii=False)}",
     ]
     if pending:
